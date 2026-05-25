@@ -94,13 +94,41 @@ const deleteLink = catchAsync(async (req: Request, res: Response) => {
 
 const redirectLink = catchAsync(async (req: Request, res: Response) => {
   const { shortCode } = req.params;
+  const result = await LinkServices.redirectLinkFromDB(shortCode as string);
 
-  const originalUrl = await LinkServices.redirectLinkFromDB(
-    shortCode as string,
-  );
+  if (result.requiresPassword) {
+    res.status(200).json({
+      success: false,
+      message: "Password required",
+      requiresPassword: true,
+      shortCode: result.shortCode,
+    });
+    return;
+  }
 
-  res.redirect(originalUrl);
+  res.redirect(result.originalUrl as string);
 });
+
+const unlockPasswordProtectedLink = catchAsync(
+  async (req: Request, res: Response) => {
+    const { shortCode } = req.params;
+    const { password } = req.body;
+
+    const result = await LinkServices.unlockPasswordProtectedLinkFromDB(
+      shortCode as string,
+      password,
+    );
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: "Link unlocked successfully",
+      data: {
+        originalUrl: result.originalUrl,
+        shortCode: result.shortCode,
+      },
+    });
+  },
+);
 
 export const LinkControllers = {
   createLink,
@@ -109,4 +137,5 @@ export const LinkControllers = {
   updateLink,
   deleteLink,
   redirectLink,
+  unlockPasswordProtectedLink,
 };

@@ -29,6 +29,23 @@ const linkSchema = new Schema<ILink>(
       type: Boolean,
       default: true,
     },
+    isPasswordProtected: {
+      type: Boolean,
+      default: false,
+    },
+    passwordHash: {
+      type: String,
+      select: false,
+      default: null,
+    },
+    expiresAt: {
+      type: Date,
+      default: null,
+    },
+    maxClicks: {
+      type: Number,
+      default: null,
+    },
   },
   {
     timestamps: true,

@@ -14,6 +14,11 @@ router.post(
 );
 
 router.get("/", auth("user", "admin"), LinkControllers.getMyLinks);
+router.post(
+  "/unlock/:shortCode",
+  validateRequest(LinkValidations.unlockLinkValidationSchema),
+  LinkControllers.unlockPasswordProtectedLink,
+);
 
 router.get(
   "/:id",
