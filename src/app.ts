@@ -10,6 +10,8 @@ import morgan from "morgan";
 import { notFound } from "./middleware/notFound.js";
 import { globalErrorHandler } from "./middleware/globalErrorHandler.js";
 import { AuthRoutes } from "./modules/auth/auth.route.js";
+import { LinkRoutes } from "./modules/link/link.route.js";
+import { LinkControllers } from "./modules/link/link.controller.js";
 
 const app: Application = express();
 
@@ -25,8 +27,10 @@ if (config.node_env === "development") {
 app.get("/", (req: Request, res: Response) => {
   res.send("Smart Link API is running;");
 });
-
 app.use("/api/auth", AuthRoutes);
+app.use("/api/links", LinkRoutes);
+
+app.get("/:shortCode", LinkControllers.redirectLink);
 
 app.use(notFound);
 app.use(globalErrorHandler);
