@@ -8,6 +8,12 @@ const linkSchema = new Schema<ILink>(
       ref: "User",
       required: [true, "User Id is required"],
     },
+    campaignId: {
+      type: Schema.Types.ObjectId,
+      ref: "Campaign",
+      default: null,
+      index: true,
+    },
     originalUrl: {
       type: String,
       required: [true, "Original Url is required"],

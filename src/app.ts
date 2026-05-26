@@ -12,6 +12,8 @@ import { globalErrorHandler } from "./middleware/globalErrorHandler.js";
 import { AuthRoutes } from "./modules/auth/auth.route.js";
 import { LinkRoutes } from "./modules/link/link.route.js";
 import { LinkControllers } from "./modules/link/link.controller.js";
+import { AnalyticsRoutes } from "./modules/analytics/analytics.route.js";
+import { CampaignRoutes } from "./modules/campaign/campaign.route.js";
 
 const app: Application = express();
 
@@ -29,6 +31,8 @@ app.get("/", (req: Request, res: Response) => {
 });
 app.use("/api/auth", AuthRoutes);
 app.use("/api/links", LinkRoutes);
+app.use("/api/analytics", AnalyticsRoutes);
+app.use("/api/campaigns", CampaignRoutes);
 
 app.get("/:shortCode", LinkControllers.redirectLink);
 

@@ -4,6 +4,8 @@ import { generateShortCode } from "../../utils/generateShortCode.js";
 import { Link } from "./link.model.js";
 import config from "../../config/index.js";
 import bcrypt from "bcrypt";
+import QRCode from "qrcode";
+import { Campaign } from "../campaign/campaign.model.js";
 
 const reservedAliases = [
   "api",
@@ -19,9 +21,26 @@ const reservedAliases = [
   "links",
 ];
 
+const validateCampaignOwnership = async (
+  campaignId: string,
+  userId: string,
+) => {
+  const campaign = await Campaign.findOne({
+    _id: new Types.ObjectId(campaignId),
+    userId: new Types.ObjectId(userId),
+  });
+
+  if (!campaign) {
+    throw new AppError(404, "Campaign not found");
+  }
+
+  return campaign;
+};
+
 const buildLinkResponse = (link: any) => {
   return {
     id: link._id,
+    campaignId: link.campaignId ?? null,
     originalUrl: link.originalUrl,
     shortCode: link.shortCode,
     shortUrl: `${config.base_url}/${link.shortCode}`,
@@ -56,6 +75,7 @@ const createLinkIntoDB = async (
     password?: string;
     expiresAt?: string;
     maxClicks?: number;
+    campaignId?: string | null;
   },
   userId: string,
 ) => {
@@ -75,9 +95,16 @@ const createLinkIntoDB = async (
   if (payload.password) {
     passwordHash = await bcrypt.hash(payload.password, 12);
   }
+  let campaignObjectId = null;
+
+  if (payload.campaignId) {
+    await validateCampaignOwnership(payload.campaignId, userId);
+    campaignObjectId = new Types.ObjectId(payload.campaignId);
+  }
 
   const result = await Link.create({
     userId: new Types.ObjectId(userId),
+    campaignId: campaignObjectId,
     originalUrl: payload.originalUrl,
     shortCode,
     isPasswordProtected: Boolean(payload.password),
@@ -121,8 +148,9 @@ const updateLinkIntoDB = async (
     isActive?: boolean;
     password?: string;
     removePassword?: boolean;
-    expiresAt?: string;
-    maxClicks?: number;
+    expiresAt?: string | null;
+    maxClicks?: number | null;
+    campaignId?: string | null;
   },
 ) => {
   const link = await Link.findOne({
@@ -176,6 +204,16 @@ const updateLinkIntoDB = async (
   if (payload.maxClicks !== undefined) {
     link.maxClicks = payload.maxClicks === null ? null : payload.maxClicks;
   }
+
+  if (payload.campaignId !== undefined) {
+    if (payload.campaignId === null) {
+      link.campaignId = null;
+    } else {
+      await validateCampaignOwnership(payload.campaignId, userId);
+      link.campaignId = new Types.ObjectId(payload.campaignId);
+    }
+  }
+
   const result = await link.save();
 
   return buildLinkResponse(result);
@@ -208,6 +246,8 @@ const redirectLinkFromDB = async (shortCode: string) => {
       requiresPassword: true,
       shortCode: link.shortCode,
       originalUrl: null,
+      linkId: link._id,
+      userId: link.userId,
     };
   }
 
@@ -218,6 +258,8 @@ const redirectLinkFromDB = async (shortCode: string) => {
     requiresPassword: false,
     shortCode: link.shortCode,
     originalUrl: link.originalUrl,
+    linkId: link._id,
+    userId: link.userId,
   };
 };
 
@@ -248,6 +290,32 @@ const unlockPasswordProtectedLinkFromDB = async (
   return {
     originalUrl: link.originalUrl,
     shortCode: link.shortCode,
+    linkId: link._id,
+    userId: link.userId,
+  };
+};
+
+const generateQrCodeFromDB = async (id: string, userId: string) => {
+  const link = await Link.findOne({
+    _id: new Types.ObjectId(id),
+    userId: new Types.ObjectId(userId),
+  });
+
+  if (!link) {
+    throw new AppError(404, "Link not found");
+  }
+
+  const shortUrl = `${config.base_url}/${link.shortCode}`;
+
+  const qrCode = await QRCode.toDataURL(shortUrl, {
+    type: "image/png",
+    margin: 2,
+    width: 500,
+  });
+
+  return {
+    shortUrl,
+    qrCode,
   };
 };
 
@@ -259,4 +327,5 @@ export const LinkServices = {
   deleteLinkFromDB,
   redirectLinkFromDB,
   unlockPasswordProtectedLinkFromDB,
+  generateQrCodeFromDB,
 };

@@ -11,11 +11,15 @@ const createLinkValidationSchema = z.object({
       .min(4, "Password must be at least 4 characters")
       .optional(),
     expiresAt: z.iso.datetime("Please provide a valid ISO date").optional(),
-
     maxClicks: z
       .number()
       .int("Max clicks must be an integer")
       .positive("Max clicks must be greater than 0")
+      .optional(),
+    campaignId: z
+      .string()
+      .regex(objectRegex, "Invalid campaign ID")
+      .nullable()
       .optional(),
   }),
 });
@@ -53,10 +57,20 @@ const updateLinkValidationSchema = z.object({
         .positive("Max clicks must be greater than 0")
         .nullable()
         .optional(),
+      campaignId: z
+        .string()
+        .regex(objectRegex, "Invalid campaign ID")
+        .nullable()
+        .optional(),
     })
-    .refine((data) => {
-      (Object.keys(data).length > 0,
-        "At Least one field is required to update");
+    .superRefine((data, ctx) => {
+      if (Object.keys(data).length === 0) {
+        ctx.addIssue({
+          code: "custom",
+          path: [],
+          message: "At least one field is required to update",
+        });
+      }
     }),
 });
 

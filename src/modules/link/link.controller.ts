@@ -3,6 +3,7 @@ import catchAsync from "../../utils/catchAsync.js";
 import AppError from "../../errors/AppError.js";
 import { LinkServices } from "./link.service.js";
 import sendResponse from "../../utils/sendResponse.js";
+import { createClickEvent } from "../../utils/createClickEvent.js";
 
 const createLink = catchAsync(async (req: Request, res: Response) => {
   if (!req.user) {
@@ -92,6 +93,26 @@ const deleteLink = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const generateQrCode = catchAsync(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError(401, "You are not authorized");
+  }
+
+  const { id } = req.params;
+
+  const result = await LinkServices.generateQrCodeFromDB(
+    id as string,
+    req.user.id,
+  );
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "QR code generated successfully",
+    data: result,
+  });
+});
+
 const redirectLink = catchAsync(async (req: Request, res: Response) => {
   const { shortCode } = req.params;
   const result = await LinkServices.redirectLinkFromDB(shortCode as string);
@@ -106,6 +127,12 @@ const redirectLink = catchAsync(async (req: Request, res: Response) => {
     return;
   }
 
+  await createClickEvent(req, {
+    linkId: result.linkId,
+    userId: result.userId,
+    shortCode: result.shortCode,
+  });
+
   res.redirect(result.originalUrl as string);
 });
 
@@ -118,6 +145,13 @@ const unlockPasswordProtectedLink = catchAsync(
       shortCode as string,
       password,
     );
+
+    await createClickEvent(req, {
+      linkId: result.linkId,
+      userId: result.userId,
+      shortCode: result.shortCode,
+    });
+
     sendResponse(res, {
       statusCode: 200,
       success: true,
@@ -138,4 +172,5 @@ export const LinkControllers = {
   deleteLink,
   redirectLink,
   unlockPasswordProtectedLink,
+  generateQrCode,
 };

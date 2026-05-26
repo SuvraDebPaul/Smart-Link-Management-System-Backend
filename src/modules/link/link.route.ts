@@ -14,10 +14,18 @@ router.post(
 );
 
 router.get("/", auth("user", "admin"), LinkControllers.getMyLinks);
+
 router.post(
   "/unlock/:shortCode",
   validateRequest(LinkValidations.unlockLinkValidationSchema),
   LinkControllers.unlockPasswordProtectedLink,
+);
+
+router.get(
+  "/:id/qr",
+  auth("user", "admin"),
+  validateRequest(LinkValidations.getSingleLinkValidationSchema),
+  LinkControllers.generateQrCode,
 );
 
 router.get(
