@@ -22,6 +22,14 @@ const reservedAliases = [
   "links",
 ];
 
+const normalizeHost = (host: string) => {
+  return host
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/:\d+$/, "")
+    .trim();
+};
+
 const validateDomainOwnership = async (domainId: string, userId: string) => {
   const domain = await Domain.findOne({
     _id: new Types.ObjectId(domainId),
@@ -116,31 +124,35 @@ const createLinkIntoDB = async (
   userId: string,
 ) => {
   let shortCode = payload.customAlias || generateShortCode();
+  let domainObjectId = null;
+  let passwordHash: string | null = null;
+  let campaignObjectId = null;
 
   if (reservedAliases.includes(shortCode.toLowerCase())) {
     throw new AppError(400, "This alias is reserved. Please use another one.");
   }
 
-  const existingShortCode = await Link.findOne({ shortCode });
+  if (payload.domainId) {
+    await validateDomainOwnership(payload.domainId, userId);
+    domainObjectId = new Types.ObjectId(payload.domainId);
+  }
+
+  const existingShortCode = await Link.findOne({
+    shortCode,
+    domainId: domainObjectId,
+  });
 
   if (existingShortCode) {
     throw new AppError(409, "This short code or alias is already taken");
   }
-  let passwordHash: string | null = null;
 
   if (payload.password) {
     passwordHash = await bcrypt.hash(payload.password, 12);
   }
-  let campaignObjectId = null;
+
   if (payload.campaignId) {
     await validateCampaignOwnership(payload.campaignId, userId);
     campaignObjectId = new Types.ObjectId(payload.campaignId);
-  }
-
-  let domainObjectId = null;
-  if (payload.domainId) {
-    await validateDomainOwnership(payload.domainId, userId);
-    domainObjectId = new Types.ObjectId(payload.domainId);
   }
 
   const result = await Link.create({
@@ -211,21 +223,12 @@ const updateLinkIntoDB = async (
 
   if (payload.customAlias) {
     const newShortCode = payload.customAlias;
-
     if (reservedAliases.includes(newShortCode.toLowerCase())) {
       throw new AppError(
         400,
         "This alias is reserved. Please use another one.",
       );
     }
-    const existingShortCode = await Link.findOne({
-      shortCode: newShortCode,
-      _id: { $ne: new Types.ObjectId(id) },
-    });
-    if (existingShortCode) {
-      throw new AppError(409, "This short code or alias is already taken");
-    }
-    link.shortCode = newShortCode;
   }
 
   if (payload.originalUrl) {
@@ -235,10 +238,12 @@ const updateLinkIntoDB = async (
   if (typeof payload.isActive === "boolean") {
     link.isActive = payload.isActive;
   }
+
   if (payload.password) {
     link.passwordHash = await bcrypt.hash(payload.password, 12);
     link.isPasswordProtected = true;
   }
+
   if (payload.removePassword === true) {
     link.passwordHash = null;
     link.isPasswordProtected = false;
@@ -270,6 +275,19 @@ const updateLinkIntoDB = async (
     }
   }
 
+  const duplicateLink = await Link.findOne({
+    shortCode: link.shortCode,
+    domainId: link.domainId ?? null,
+    _id: { $ne: new Types.ObjectId(id) },
+  });
+
+  if (duplicateLink) {
+    throw new AppError(
+      409,
+      "This short code or alias is already taken for this domain",
+    );
+  }
+
   const result = await link.save();
 
   const populatedResult = await result.populate("domainId");
@@ -292,6 +310,57 @@ const deleteLinkFromDB = async (id: string, userId: string) => {
 
 const redirectLinkFromDB = async (shortCode: string) => {
   const link = await Link.findOne({ shortCode });
+
+  if (!link) {
+    throw new AppError(404, "Short link not found");
+  }
+
+  validateLinkAvailability(link);
+
+  if (link.isPasswordProtected) {
+    return {
+      requiresPassword: true,
+      shortCode: link.shortCode,
+      originalUrl: null,
+      linkId: link._id,
+      userId: link.userId,
+    };
+  }
+
+  link.clicks += 1;
+  await link.save();
+
+  return {
+    requiresPassword: false,
+    shortCode: link.shortCode,
+    originalUrl: link.originalUrl,
+    linkId: link._id,
+    userId: link.userId,
+  };
+};
+
+const redirectLinkByHostFromDB = async (shortCode: string, host: string) => {
+  const normalizedHost = normalizeHost(host);
+
+  const domain = await Domain.findOne({
+    domain: normalizedHost,
+    status: "verified",
+    isActive: true,
+  });
+
+  let link;
+
+  if (domain) {
+    link = await Link.findOne({
+      shortCode,
+      domainId: domain._id,
+    });
+  } else {
+    link = await Link.findOne({
+      shortCode,
+      domainId: null,
+    });
+  }
 
   if (!link) {
     throw new AppError(404, "Short link not found");
@@ -384,6 +453,7 @@ export const LinkServices = {
   updateLinkIntoDB,
   deleteLinkFromDB,
   redirectLinkFromDB,
+  redirectLinkByHostFromDB,
   unlockPasswordProtectedLinkFromDB,
   generateQrCodeFromDB,
 };

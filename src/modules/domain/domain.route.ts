@@ -43,4 +43,10 @@ router.post(
   DomainControllers.verifyDomainManually,
 );
 
+router.post(
+  "/:id/verify-dns",
+  auth("user", "admin"),
+  validateRequest(DomainValidations.domainIdValidationSchema),
+  DomainControllers.verifyDomainDns,
+);
 export const DomainRoutes = router;

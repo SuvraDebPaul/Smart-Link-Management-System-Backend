@@ -28,7 +28,6 @@ const linkSchema = new Schema<ILink>(
     shortCode: {
       type: String,
       required: [true, "Short code is required"],
-      unique: true,
       trim: true,
       index: true,
     },
@@ -63,5 +62,7 @@ const linkSchema = new Schema<ILink>(
     timestamps: true,
   },
 );
+
+linkSchema.index({ shortCode: 1, domainId: 1 }, { unique: true });
 
 export const Link = model<ILink>("Link", linkSchema);

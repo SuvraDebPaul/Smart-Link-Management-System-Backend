@@ -115,7 +115,12 @@ const generateQrCode = catchAsync(async (req: Request, res: Response) => {
 
 const redirectLink = catchAsync(async (req: Request, res: Response) => {
   const { shortCode } = req.params;
-  const result = await LinkServices.redirectLinkFromDB(shortCode as string);
+  const host = req.headers.host || req.hostname;
+
+  const result = await LinkServices.redirectLinkByHostFromDB(
+    shortCode as string,
+    host,
+  );
 
   if (result.requiresPassword) {
     res.status(200).json({

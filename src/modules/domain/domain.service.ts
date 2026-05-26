@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import AppError from "../../errors/AppError.js";
 import { Domain } from "./domain.model.js";
 import { Link } from "../link/link.model.js";
+import dns from "node:dns/promises";
 
 const normalizeDomain = (domain: string) => {
   return domain
@@ -149,6 +150,54 @@ const verifyDomainManuallyIntoDB = async (id: string, userId: string) => {
   return buildDomainResponse(result);
 };
 
+const verifyDomainDnsIntoDB = async (id: string, userId: string) => {
+  const domain = await Domain.findOne({
+    _id: new Types.ObjectId(id),
+    userId: new Types.ObjectId(userId),
+  });
+
+  if (!domain) {
+    throw new AppError(404, "Domain not found");
+  }
+
+  try {
+    const txtRecords = await dns.resolveTxt(domain.domain);
+
+    const flattenedRecords = txtRecords.map((record) => record.join(""));
+
+    const isVerified = flattenedRecords.includes(domain.verificationToken);
+
+    if (!isVerified) {
+      domain.status = "failed";
+      await domain.save();
+
+      throw new AppError(
+        400,
+        "DNS TXT record not found. Please add the verification token and try again.",
+      );
+    }
+
+    domain.status = "verified";
+    domain.isActive = true;
+
+    const result = await domain.save();
+
+    return buildDomainResponse(result);
+  } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
+
+    domain.status = "failed";
+    await domain.save();
+
+    throw new AppError(
+      400,
+      "Unable to verify DNS TXT record. Please check your DNS settings and try again.",
+    );
+  }
+};
+
 export const DomainServices = {
   createDomainIntoDB,
   getMyDomainsFromDB,
@@ -156,4 +205,5 @@ export const DomainServices = {
   updateDomainIntoDB,
   deleteDomainFromDB,
   verifyDomainManuallyIntoDB,
+  verifyDomainDnsIntoDB,
 };

@@ -120,6 +120,26 @@ const verifyDomainManually = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const verifyDomainDns = catchAsync(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError(401, "You are not authorized");
+  }
+
+  const { id } = req.params;
+
+  const result = await DomainServices.verifyDomainDnsIntoDB(
+    id as string,
+    req.user.id,
+  );
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Domain DNS verified successfully",
+    data: result,
+  });
+});
+
 export const DomainControllers = {
   createDomain,
   getMyDomains,
@@ -127,4 +147,5 @@ export const DomainControllers = {
   updateDomain,
   deleteDomain,
   verifyDomainManually,
+  verifyDomainDns,
 };
