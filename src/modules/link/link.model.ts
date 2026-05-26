@@ -14,6 +14,12 @@ const linkSchema = new Schema<ILink>(
       default: null,
       index: true,
     },
+    domainId: {
+      type: Schema.Types.ObjectId,
+      ref: "Domain",
+      default: null,
+      index: true,
+    },
     originalUrl: {
       type: String,
       required: [true, "Original Url is required"],

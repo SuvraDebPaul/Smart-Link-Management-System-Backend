@@ -6,6 +6,7 @@ import config from "../../config/index.js";
 import bcrypt from "bcrypt";
 import QRCode from "qrcode";
 import { Campaign } from "../campaign/campaign.model.js";
+import { Domain } from "../domain/domain.model.js";
 
 const reservedAliases = [
   "api",
@@ -20,6 +21,24 @@ const reservedAliases = [
   "auth",
   "links",
 ];
+
+const validateDomainOwnership = async (domainId: string, userId: string) => {
+  const domain = await Domain.findOne({
+    _id: new Types.ObjectId(domainId),
+    userId: new Types.ObjectId(userId),
+    status: "verified",
+    isActive: true,
+  });
+
+  if (!domain) {
+    throw new AppError(
+      404,
+      "Verified active domain not found. Please verify or activate the domain first.",
+    );
+  }
+
+  return domain;
+};
 
 const validateCampaignOwnership = async (
   campaignId: string,
@@ -38,17 +57,33 @@ const validateCampaignOwnership = async (
 };
 
 const buildLinkResponse = (link: any) => {
+  const domainDoc = link.domainId;
+  const isDomainUsable =
+    domainDoc &&
+    typeof domainDoc === "object" &&
+    domainDoc.domain &&
+    domainDoc.status === "verified" &&
+    domainDoc.isActive === true;
+
   return {
     id: link._id,
     campaignId: link.campaignId ?? null,
+    domainId: domainDoc?._id ?? domainDoc ?? null,
+
     originalUrl: link.originalUrl,
     shortCode: link.shortCode,
+
     shortUrl: `${config.base_url}/${link.shortCode}`,
+    customShortUrl: isDomainUsable
+      ? `https://${domainDoc.domain}/${link.shortCode}`
+      : null,
+
     clicks: link.clicks,
     isActive: link.isActive,
     isPasswordProtected: link.isPasswordProtected,
     expiresAt: link.expiresAt ?? null,
     maxClicks: link.maxClicks ?? null,
+
     createdAt: link.createdAt,
     updatedAt: link.updatedAt,
   };
@@ -76,6 +111,7 @@ const createLinkIntoDB = async (
     expiresAt?: string;
     maxClicks?: number;
     campaignId?: string | null;
+    domainId?: string | null;
   },
   userId: string,
 ) => {
@@ -96,15 +132,21 @@ const createLinkIntoDB = async (
     passwordHash = await bcrypt.hash(payload.password, 12);
   }
   let campaignObjectId = null;
-
   if (payload.campaignId) {
     await validateCampaignOwnership(payload.campaignId, userId);
     campaignObjectId = new Types.ObjectId(payload.campaignId);
   }
 
+  let domainObjectId = null;
+  if (payload.domainId) {
+    await validateDomainOwnership(payload.domainId, userId);
+    domainObjectId = new Types.ObjectId(payload.domainId);
+  }
+
   const result = await Link.create({
     userId: new Types.ObjectId(userId),
     campaignId: campaignObjectId,
+    domainId: domainObjectId,
     originalUrl: payload.originalUrl,
     shortCode,
     isPasswordProtected: Boolean(payload.password),
@@ -113,15 +155,19 @@ const createLinkIntoDB = async (
     maxClicks: payload.maxClicks ?? null,
   });
 
-  return buildLinkResponse(result);
+  const populatedResult = await result.populate("domainId");
+
+  return buildLinkResponse(populatedResult);
 };
 
 const getMyLinksFromDB = async (userId: string) => {
   const result = await Link.find({
     userId: new Types.ObjectId(userId),
-  }).sort({
-    createdAt: -1,
-  });
+  })
+    .populate("domainId")
+    .sort({
+      createdAt: -1,
+    });
 
   return result.map((link) => buildLinkResponse(link));
 };
@@ -130,7 +176,7 @@ const getSingleLinkFromDB = async (id: string, userId: string) => {
   const result = await Link.findOne({
     _id: new Types.ObjectId(id),
     userId: new Types.ObjectId(userId),
-  });
+  }).populate("domainId");
 
   if (!result) {
     throw new AppError(404, "Link not found");
@@ -151,6 +197,7 @@ const updateLinkIntoDB = async (
     expiresAt?: string | null;
     maxClicks?: number | null;
     campaignId?: string | null;
+    domainId?: string | null;
   },
 ) => {
   const link = await Link.findOne({
@@ -214,9 +261,20 @@ const updateLinkIntoDB = async (
     }
   }
 
+  if (payload.domainId !== undefined) {
+    if (payload.domainId === null) {
+      link.domainId = null;
+    } else {
+      await validateDomainOwnership(payload.domainId, userId);
+      link.domainId = new Types.ObjectId(payload.domainId);
+    }
+  }
+
   const result = await link.save();
 
-  return buildLinkResponse(result);
+  const populatedResult = await result.populate("domainId");
+
+  return buildLinkResponse(populatedResult);
 };
 
 const deleteLinkFromDB = async (id: string, userId: string) => {

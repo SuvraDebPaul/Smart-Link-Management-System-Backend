@@ -25,8 +25,16 @@ const campaignIdValidationSchema = z.object({
   query: dateQuerySchema,
 });
 
+const pageIdValidationSchema = z.object({
+  params: z.object({
+    pageId: z.string().regex(objectIdRegex, "Invalid page ID"),
+  }),
+  query: dateQuerySchema,
+});
+
 export const AnalyticsValidations = {
   dateFilterSchema,
   linkIdValidationSchema,
   campaignIdValidationSchema,
+  pageIdValidationSchema,
 };

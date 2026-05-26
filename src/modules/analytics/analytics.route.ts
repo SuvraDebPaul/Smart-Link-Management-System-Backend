@@ -14,6 +14,41 @@ router.get(
 );
 
 router.get(
+  "/pages/:pageId",
+  auth("user", "admin"),
+  validateRequest(AnalyticsValidations.pageIdValidationSchema),
+  AnalyticsControllers.getPageAnalytics,
+);
+
+router.get(
+  "/pages/:pageId/daily-visits",
+  auth("user", "admin"),
+  validateRequest(AnalyticsValidations.pageIdValidationSchema),
+  AnalyticsControllers.getPageDailyVisits,
+);
+
+router.get(
+  "/pages/:pageId/devices",
+  auth("user", "admin"),
+  validateRequest(AnalyticsValidations.pageIdValidationSchema),
+  AnalyticsControllers.getPageDeviceAnalytics,
+);
+
+router.get(
+  "/pages/:pageId/browsers",
+  auth("user", "admin"),
+  validateRequest(AnalyticsValidations.pageIdValidationSchema),
+  AnalyticsControllers.getPageBrowserAnalytics,
+);
+
+router.get(
+  "/pages/:pageId/referrers",
+  auth("user", "admin"),
+  validateRequest(AnalyticsValidations.pageIdValidationSchema),
+  AnalyticsControllers.getPageReferrerAnalytics,
+);
+
+router.get(
   "/campaigns/:campaignId",
   auth("user", "admin"),
   validateRequest(AnalyticsValidations.campaignIdValidationSchema),
@@ -60,6 +95,20 @@ router.get(
   auth("user", "admin"),
   validateRequest(AnalyticsValidations.linkIdValidationSchema),
   AnalyticsControllers.getDailyClicks,
+);
+
+router.get(
+  "/pages/:pageId/link-clicks",
+  auth("user", "admin"),
+  validateRequest(AnalyticsValidations.pageIdValidationSchema),
+  AnalyticsControllers.getPageLinkClicks,
+);
+
+router.get(
+  "/pages/:pageId/link-clicks/daily",
+  auth("user", "admin"),
+  validateRequest(AnalyticsValidations.pageIdValidationSchema),
+  AnalyticsControllers.getPageLinkDailyClicks,
 );
 
 router.get(

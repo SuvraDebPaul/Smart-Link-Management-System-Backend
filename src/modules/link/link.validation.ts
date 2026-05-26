@@ -21,6 +21,11 @@ const createLinkValidationSchema = z.object({
       .regex(objectRegex, "Invalid campaign ID")
       .nullable()
       .optional(),
+    domainId: z
+      .string()
+      .regex(objectRegex, "Invalid domain ID")
+      .nullable()
+      .optional(),
   }),
 });
 
@@ -60,6 +65,11 @@ const updateLinkValidationSchema = z.object({
       campaignId: z
         .string()
         .regex(objectRegex, "Invalid campaign ID")
+        .nullable()
+        .optional(),
+      domainId: z
+        .string()
+        .regex(objectRegex, "Invalid domain ID")
         .nullable()
         .optional(),
     })

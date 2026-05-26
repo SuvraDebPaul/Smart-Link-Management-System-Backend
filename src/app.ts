@@ -14,6 +14,11 @@ import { LinkRoutes } from "./modules/link/link.route.js";
 import { LinkControllers } from "./modules/link/link.controller.js";
 import { AnalyticsRoutes } from "./modules/analytics/analytics.route.js";
 import { CampaignRoutes } from "./modules/campaign/campaign.route.js";
+import { PageRoutes } from "./modules/page/page.route.js";
+import { validateRequest } from "./middleware/validateRequest.js";
+import { PageValidations } from "./modules/page/page.validation.js";
+import { PageControllers } from "./modules/page/page.controller.js";
+import { DomainRoutes } from "./modules/domain/domain.route.js";
 
 const app: Application = express();
 
@@ -33,6 +38,20 @@ app.use("/api/auth", AuthRoutes);
 app.use("/api/links", LinkRoutes);
 app.use("/api/analytics", AnalyticsRoutes);
 app.use("/api/campaigns", CampaignRoutes);
+app.use("/api/pages", PageRoutes);
+app.use("/api/domains", DomainRoutes);
+
+app.get(
+  "/u/:slug/click/:linkIndex",
+  validateRequest(PageValidations.publicPageLinkClickValidationSchema),
+  PageControllers.redirectPublicPageLink,
+);
+
+app.get(
+  "/u/:slug",
+  validateRequest(PageValidations.publicPageValidationSchema),
+  PageControllers.getPublicPage,
+);
 
 app.get("/:shortCode", LinkControllers.redirectLink);
 

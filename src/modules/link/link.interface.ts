@@ -3,6 +3,7 @@ import type { Types } from "mongoose";
 export interface ILink {
   userId: Types.ObjectId;
   campaignId?: Types.ObjectId | null;
+  domainId?: Types.ObjectId | null;
 
   originalUrl: string;
   shortCode: string;

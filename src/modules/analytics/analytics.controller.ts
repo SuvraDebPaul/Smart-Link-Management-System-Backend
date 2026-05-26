@@ -289,6 +289,189 @@ const getCampaignReferrerAnalytics = catchAsync(
   },
 );
 
+const getPageAnalytics = catchAsync(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError(401, "You are not authorized");
+  }
+
+  const { pageId } = req.params;
+
+  if (!pageId || typeof pageId !== "string") {
+    throw new AppError(400, "Valid pageId is required");
+  }
+
+  const result = await AnalyticsServices.getPageAnalyticsFromDB(
+    pageId,
+    req.user.id,
+    getDateFilters(req),
+  );
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Page analytics retrieved successfully",
+    data: result,
+  });
+});
+
+const getPageDailyVisits = catchAsync(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError(401, "You are not authorized");
+  }
+
+  const { pageId } = req.params;
+
+  if (!pageId || typeof pageId !== "string") {
+    throw new AppError(400, "Valid pageId is required");
+  }
+
+  const result = await AnalyticsServices.getPageDailyVisitsFromDB(
+    pageId,
+    req.user.id,
+    getDateFilters(req),
+  );
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Page daily visits retrieved successfully",
+    data: result,
+  });
+});
+
+const getPageDeviceAnalytics = catchAsync(
+  async (req: Request, res: Response) => {
+    if (!req.user) {
+      throw new AppError(401, "You are not authorized");
+    }
+
+    const { pageId } = req.params;
+
+    if (!pageId || typeof pageId !== "string") {
+      throw new AppError(400, "Valid pageId is required");
+    }
+
+    const result = await AnalyticsServices.getPageDeviceAnalyticsFromDB(
+      pageId,
+      req.user.id,
+      getDateFilters(req),
+    );
+
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: "Page device analytics retrieved successfully",
+      data: result,
+    });
+  },
+);
+
+const getPageBrowserAnalytics = catchAsync(
+  async (req: Request, res: Response) => {
+    if (!req.user) {
+      throw new AppError(401, "You are not authorized");
+    }
+
+    const { pageId } = req.params;
+
+    if (!pageId || typeof pageId !== "string") {
+      throw new AppError(400, "Valid pageId is required");
+    }
+
+    const result = await AnalyticsServices.getPageBrowserAnalyticsFromDB(
+      pageId,
+      req.user.id,
+      getDateFilters(req),
+    );
+
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: "Page browser analytics retrieved successfully",
+      data: result,
+    });
+  },
+);
+
+const getPageReferrerAnalytics = catchAsync(
+  async (req: Request, res: Response) => {
+    if (!req.user) {
+      throw new AppError(401, "You are not authorized");
+    }
+
+    const { pageId } = req.params;
+
+    if (!pageId || typeof pageId !== "string") {
+      throw new AppError(400, "Valid pageId is required");
+    }
+
+    const result = await AnalyticsServices.getPageReferrerAnalyticsFromDB(
+      pageId,
+      req.user.id,
+      getDateFilters(req),
+    );
+
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: "Page referrer analytics retrieved successfully",
+      data: result,
+    });
+  },
+);
+
+const getPageLinkClicks = catchAsync(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError(401, "You are not authorized");
+  }
+
+  const { pageId } = req.params;
+
+  if (!pageId || typeof pageId !== "string") {
+    throw new AppError(400, "Valid pageId is required");
+  }
+
+  const result = await AnalyticsServices.getPageLinkClicksFromDB(
+    pageId,
+    req.user.id,
+    getDateFilters(req),
+  );
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Page link clicks retrieved successfully",
+    data: result,
+  });
+});
+
+const getPageLinkDailyClicks = catchAsync(
+  async (req: Request, res: Response) => {
+    if (!req.user) {
+      throw new AppError(401, "You are not authorized");
+    }
+
+    const { pageId } = req.params;
+
+    if (!pageId || typeof pageId !== "string") {
+      throw new AppError(400, "Valid pageId is required");
+    }
+
+    const result = await AnalyticsServices.getPageLinkDailyClicksFromDB(
+      pageId,
+      req.user.id,
+      getDateFilters(req),
+    );
+
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: "Page link daily clicks retrieved successfully",
+      data: result,
+    });
+  },
+);
+
 export const AnalyticsControllers = {
   getOverview,
   getSingleLinkAnalytics,
@@ -301,4 +484,11 @@ export const AnalyticsControllers = {
   getCampaignDeviceAnalytics,
   getCampaignBrowserAnalytics,
   getCampaignReferrerAnalytics,
+  getPageAnalytics,
+  getPageDailyVisits,
+  getPageDeviceAnalytics,
+  getPageBrowserAnalytics,
+  getPageReferrerAnalytics,
+  getPageLinkClicks,
+  getPageLinkDailyClicks,
 };

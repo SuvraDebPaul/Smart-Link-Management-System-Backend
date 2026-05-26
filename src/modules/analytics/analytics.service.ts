@@ -3,6 +3,9 @@ import AppError from "../../errors/AppError.js";
 import { Link } from "../link/link.model.js";
 import { ClickEvent } from "./analytics.model.js";
 import { Campaign } from "../campaign/campaign.model.js";
+import { Page } from "../page/page.model.js";
+import { PageVisit } from "../pageVisit/pageVisit.model.js";
+import { PageLinkClick } from "../pageVisit/pageLinkClick.model.js";
 
 type TDateFilters = {
   startDate?: string | undefined;
@@ -11,6 +14,34 @@ type TDateFilters = {
 
 const buildDateMatch = (filters?: TDateFilters) => {
   const dateMatch: Record<string, Date> = {};
+
+  if (filters?.startDate) {
+    dateMatch.$gte = new Date(filters.startDate);
+  }
+
+  if (filters?.endDate) {
+    dateMatch.$lte = new Date(filters.endDate);
+  }
+
+  return Object.keys(dateMatch).length > 0 ? { clickedAt: dateMatch } : {};
+};
+
+const buildDateMatchForPageVisits = (filters?: TDateFilters) => {
+  const dateMatch: Record<string, Date> = {};
+
+  if (filters?.startDate) {
+    dateMatch.$gte = new Date(filters.startDate);
+  }
+
+  if (filters?.endDate) {
+    dateMatch.$lte = new Date(filters.endDate);
+  }
+
+  return Object.keys(dateMatch).length > 0 ? { visitedAt: dateMatch } : {};
+};
+
+const buildDateMatchForPageLinkClicks = (filters?: TDateFilters) => {
+  const dateMatch: { $gte?: Date; $lte?: Date } = {};
 
   if (filters?.startDate) {
     dateMatch.$gte = new Date(filters.startDate);
@@ -47,6 +78,19 @@ const checkCampaignOwnership = async (campaignId: string, userId: string) => {
   }
 
   return campaign;
+};
+
+const checkPageOwnership = async (pageId: string, userId: string) => {
+  const page = await Page.findOne({
+    _id: new Types.ObjectId(pageId),
+    userId: new Types.ObjectId(userId),
+  });
+
+  if (!page) {
+    throw new AppError(404, "Page not found");
+  }
+
+  return page;
 };
 
 const getAnalyticsOverviewFromDB = async (
@@ -653,6 +697,327 @@ const getCampaignReferrerAnalyticsFromDB = async (
   return result;
 };
 
+const getPageAnalyticsFromDB = async (
+  pageId: string,
+  userId: string,
+  filters?: TDateFilters,
+) => {
+  const page = await checkPageOwnership(pageId, userId);
+
+  const pageObjectId = new Types.ObjectId(pageId);
+  const dateMatch = buildDateMatchForPageVisits(filters);
+
+  const totalVisits = await PageVisit.countDocuments({
+    pageId: pageObjectId,
+    ...dateMatch,
+  });
+
+  const uniqueVisitors = await PageVisit.distinct("ipAddress", {
+    pageId: pageObjectId,
+    ipAddress: { $ne: null },
+    ...dateMatch,
+  });
+
+  const lastVisit = await PageVisit.findOne({
+    pageId: pageObjectId,
+    ...dateMatch,
+  })
+    .sort({ visitedAt: -1 })
+    .select("visitedAt browser os device referrer");
+
+  return {
+    page: {
+      id: page._id,
+      slug: page.slug,
+      title: page.title,
+      visits: page.visits,
+      isPublished: page.isPublished,
+      theme: page.theme,
+      createdAt: page.createdAt,
+    },
+    totalVisits,
+    uniqueVisitors: uniqueVisitors.length,
+    lastVisit,
+  };
+};
+
+const getPageDailyVisitsFromDB = async (
+  pageId: string,
+  userId: string,
+  filters?: TDateFilters,
+) => {
+  await checkPageOwnership(pageId, userId);
+
+  const pageObjectId = new Types.ObjectId(pageId);
+  const dateMatch = buildDateMatchForPageVisits(filters);
+
+  const result = await PageVisit.aggregate([
+    {
+      $match: {
+        pageId: pageObjectId,
+        ...dateMatch,
+      },
+    },
+    {
+      $group: {
+        _id: {
+          $dateToString: {
+            format: "%Y-%m-%d",
+            date: "$visitedAt",
+          },
+        },
+        visits: {
+          $sum: 1,
+        },
+      },
+    },
+    {
+      $sort: {
+        _id: 1,
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        date: "$_id",
+        visits: 1,
+      },
+    },
+  ]);
+
+  return result;
+};
+
+const getPageDeviceAnalyticsFromDB = async (
+  pageId: string,
+  userId: string,
+  filters?: TDateFilters,
+) => {
+  await checkPageOwnership(pageId, userId);
+
+  const pageObjectId = new Types.ObjectId(pageId);
+  const dateMatch = buildDateMatchForPageVisits(filters);
+
+  const result = await PageVisit.aggregate([
+    {
+      $match: {
+        pageId: pageObjectId,
+        ...dateMatch,
+      },
+    },
+    {
+      $group: {
+        _id: "$device",
+        visits: {
+          $sum: 1,
+        },
+      },
+    },
+    {
+      $sort: {
+        visits: -1,
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        device: "$_id",
+        visits: 1,
+      },
+    },
+  ]);
+
+  return result;
+};
+
+const getPageBrowserAnalyticsFromDB = async (
+  pageId: string,
+  userId: string,
+  filters?: TDateFilters,
+) => {
+  await checkPageOwnership(pageId, userId);
+
+  const pageObjectId = new Types.ObjectId(pageId);
+  const dateMatch = buildDateMatchForPageVisits(filters);
+
+  const result = await PageVisit.aggregate([
+    {
+      $match: {
+        pageId: pageObjectId,
+        ...dateMatch,
+      },
+    },
+    {
+      $group: {
+        _id: "$browser",
+        visits: {
+          $sum: 1,
+        },
+      },
+    },
+    {
+      $sort: {
+        visits: -1,
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        browser: "$_id",
+        visits: 1,
+      },
+    },
+  ]);
+
+  return result;
+};
+
+const getPageReferrerAnalyticsFromDB = async (
+  pageId: string,
+  userId: string,
+  filters?: TDateFilters,
+) => {
+  await checkPageOwnership(pageId, userId);
+
+  const pageObjectId = new Types.ObjectId(pageId);
+  const dateMatch = buildDateMatchForPageVisits(filters);
+
+  const result = await PageVisit.aggregate([
+    {
+      $match: {
+        pageId: pageObjectId,
+        ...dateMatch,
+      },
+    },
+    {
+      $group: {
+        _id: {
+          $ifNull: ["$referrer", "Direct"],
+        },
+        visits: {
+          $sum: 1,
+        },
+      },
+    },
+    {
+      $sort: {
+        visits: -1,
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        referrer: "$_id",
+        visits: 1,
+      },
+    },
+  ]);
+
+  return result;
+};
+
+const getPageLinkClicksFromDB = async (
+  pageId: string,
+  userId: string,
+  filters?: TDateFilters,
+) => {
+  await checkPageOwnership(pageId, userId);
+
+  const pageObjectId = new Types.ObjectId(pageId);
+  const dateMatch = buildDateMatchForPageLinkClicks(filters);
+
+  const result = await PageLinkClick.aggregate([
+    {
+      $match: {
+        pageId: pageObjectId,
+        ...dateMatch,
+      },
+    },
+    {
+      $group: {
+        _id: {
+          linkIndex: "$linkIndex",
+          linkTitle: "$linkTitle",
+          linkUrl: "$linkUrl",
+        },
+        clicks: {
+          $sum: 1,
+        },
+      },
+    },
+    {
+      $sort: {
+        clicks: -1,
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        linkIndex: "$_id.linkIndex",
+        linkTitle: "$_id.linkTitle",
+        linkUrl: "$_id.linkUrl",
+        clicks: 1,
+      },
+    },
+  ]);
+
+  return result;
+};
+
+const getPageLinkDailyClicksFromDB = async (
+  pageId: string,
+  userId: string,
+  filters?: TDateFilters,
+) => {
+  await checkPageOwnership(pageId, userId);
+
+  const pageObjectId = new Types.ObjectId(pageId);
+  const dateMatch = buildDateMatchForPageLinkClicks(filters);
+
+  const result = await PageLinkClick.aggregate([
+    {
+      $match: {
+        pageId: pageObjectId,
+        ...dateMatch,
+      },
+    },
+    {
+      $group: {
+        _id: {
+          date: {
+            $dateToString: {
+              format: "%Y-%m-%d",
+              date: "$clickedAt",
+            },
+          },
+          linkIndex: "$linkIndex",
+          linkTitle: "$linkTitle",
+        },
+        clicks: {
+          $sum: 1,
+        },
+      },
+    },
+    {
+      $sort: {
+        "_id.date": 1,
+        clicks: -1,
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        date: "$_id.date",
+        linkIndex: "$_id.linkIndex",
+        linkTitle: "$_id.linkTitle",
+        clicks: 1,
+      },
+    },
+  ]);
+
+  return result;
+};
+
 export const AnalyticsServices = {
   getAnalyticsOverviewFromDB,
   getSingleLinkAnalyticsFromDB,
@@ -665,4 +1030,11 @@ export const AnalyticsServices = {
   getCampaignDeviceAnalyticsFromDB,
   getCampaignBrowserAnalyticsFromDB,
   getCampaignReferrerAnalyticsFromDB,
+  getPageAnalyticsFromDB,
+  getPageDailyVisitsFromDB,
+  getPageDeviceAnalyticsFromDB,
+  getPageBrowserAnalyticsFromDB,
+  getPageReferrerAnalyticsFromDB,
+  getPageLinkClicksFromDB,
+  getPageLinkDailyClicksFromDB,
 };
