@@ -229,6 +229,7 @@ const updateLinkIntoDB = async (
         "This alias is reserved. Please use another one.",
       );
     }
+    link.shortCode = newShortCode;
   }
 
   if (payload.originalUrl) {

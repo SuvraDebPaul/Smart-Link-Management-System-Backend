@@ -19,6 +19,9 @@ import { validateRequest } from "./middleware/validateRequest.js";
 import { PageValidations } from "./modules/page/page.validation.js";
 import { PageControllers } from "./modules/page/page.controller.js";
 import { DomainRoutes } from "./modules/domain/domain.route.js";
+import { ApiKeyRoutes } from "./modules/apiKey/apiKey.route.js";
+import { globalApiLimiter, redirectLimiter } from "./middleware/rateLimit.js";
+import botProtection from "./middleware/botProtection.js";
 
 const app: Application = express();
 
@@ -34,12 +37,15 @@ if (config.node_env === "development") {
 app.get("/", (req: Request, res: Response) => {
   res.send("Smart Link API is running;");
 });
+
+app.use("/api", globalApiLimiter);
 app.use("/api/auth", AuthRoutes);
 app.use("/api/links", LinkRoutes);
 app.use("/api/analytics", AnalyticsRoutes);
 app.use("/api/campaigns", CampaignRoutes);
 app.use("/api/pages", PageRoutes);
 app.use("/api/domains", DomainRoutes);
+app.use("/api/api-keys", ApiKeyRoutes);
 
 app.get(
   "/u/:slug/click/:linkIndex",
@@ -53,7 +59,12 @@ app.get(
   PageControllers.getPublicPage,
 );
 
-app.get("/:shortCode", LinkControllers.redirectLink);
+app.get(
+  "/:shortCode",
+  redirectLimiter,
+  botProtection,
+  LinkControllers.redirectLink,
+);
 
 app.use(notFound);
 app.use(globalErrorHandler);

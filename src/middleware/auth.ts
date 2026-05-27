@@ -2,7 +2,6 @@ import type { NextFunction, Request, Response } from "express";
 import AppError from "../errors/AppError.js";
 import jwt, { type JwtPayload } from "jsonwebtoken";
 import config from "../config/index.js";
-import { decode } from "node:punycode";
 
 export interface TAuthUser {
   id: string;

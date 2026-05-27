@@ -136,15 +136,12 @@ const getPublicPage = catchAsync(async (req: Request, res: Response) => {
 
 const redirectPublicPageLink = catchAsync(
   async (req: Request, res: Response) => {
-    const { rawSlug, linkIndex } = req.params;
-
-    const slug = Array.isArray(rawSlug) ? rawSlug[0] : rawSlug;
-    if (!slug) {
+    const { slug, linkIndex } = req.params;
+    if (!slug && typeof slug !== "string") {
       throw new AppError(400, "Page slug is required");
     }
-
     const result = await PageServices.getPublicPageLinkForRedirectFromDB(
-      slug,
+      slug as string,
       Number(linkIndex),
     );
 

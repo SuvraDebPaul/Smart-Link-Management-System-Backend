@@ -3,12 +3,15 @@ import { auth } from "../../middleware/auth.js";
 import { validateRequest } from "../../middleware/validateRequest.js";
 import { LinkValidations } from "./link.validation.js";
 import { LinkControllers } from "./link.controller.js";
+import flexibleAuth from "../../middleware/flexibleAuth.js";
+import { linkCreateLimiter } from "../../middleware/rateLimit.js";
 
 const router = Router();
 
 router.post(
   "/",
-  auth("user", "admin"),
+  linkCreateLimiter,
+  flexibleAuth,
   validateRequest(LinkValidations.createLinkValidationSchema),
   LinkControllers.createLink,
 );
