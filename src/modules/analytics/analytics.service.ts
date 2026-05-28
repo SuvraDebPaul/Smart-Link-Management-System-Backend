@@ -93,82 +93,653 @@ const checkPageOwnership = async (pageId: string, userId: string) => {
   return page;
 };
 
+const normalizeGroupLabel = (field: string, fallback: string) => ({
+  $cond: [
+    {
+      $or: [{ $eq: [`$${field}`, null] }, { $eq: [`$${field}`, ""] }],
+    },
+    fallback,
+    `$${field}`,
+  ],
+});
+const mergeBreakdownItems = (
+  items: { name: string | null; total: number }[],
+  fallback: string,
+) => {
+  const resultMap = new Map<string, number>();
+
+  for (const item of items) {
+    const label = item.name || fallback;
+    resultMap.set(label, (resultMap.get(label) ?? 0) + item.total);
+  }
+
+  return Array.from(resultMap.entries())
+    .map(([name, total]) => ({
+      name,
+      total,
+    }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 8);
+};
+const mergeDailyActivity = (
+  clicks: { date: string; clicks: number }[],
+  visits: { date: string; visits: number }[],
+) => {
+  const activityMap = new Map<
+    string,
+    {
+      date: string;
+      clicks: number;
+      visits: number;
+    }
+  >();
+
+  for (const item of clicks) {
+    activityMap.set(item.date, {
+      date: item.date,
+      clicks: item.clicks,
+      visits: 0,
+    });
+  }
+
+  for (const item of visits) {
+    const existing = activityMap.get(item.date);
+
+    activityMap.set(item.date, {
+      date: item.date,
+      clicks: existing?.clicks ?? 0,
+      visits: item.visits,
+    });
+  }
+
+  return Array.from(activityMap.values()).sort((a, b) =>
+    a.date.localeCompare(b.date),
+  );
+};
+
 const getAnalyticsOverviewFromDB = async (
   userId: string,
   filters?: TDateFilters,
 ) => {
   const userObjectId = new Types.ObjectId(userId);
-  const dateMatch = buildDateMatch(filters);
 
-  const totalLinks = await Link.countDocuments({
+  const clickDateMatch = buildDateMatch(filters);
+  const pageVisitDateMatch = buildDateMatchForPageVisits(filters);
+  const pageLinkClickDateMatch = buildDateMatchForPageLinkClicks(filters);
+
+  const userPages = await Page.find({
     userId: userObjectId,
-  });
+  })
+    .select("_id")
+    .lean();
 
-  const totalClicks = await ClickEvent.countDocuments({
-    userId: userObjectId,
-    ...dateMatch,
-  });
+  const pageIds = userPages.map((page) => page._id);
 
-  const activeLinks = await Link.countDocuments({
-    userId: userObjectId,
-    isActive: true,
-  });
+  const [
+    totalLinks,
+    totalClicks,
+    activeLinks,
+    inactiveLinks,
+    totalCampaigns,
+    totalPages,
+    totalPageVisits,
+    totalPageLinkClicks,
+    linkVisitorIps,
+    pageVisitorIps,
+    topLinks,
+    topCampaigns,
+    dailyClicks,
+    dailyVisits,
+    linkDevices,
+    pageDevices,
+    linkBrowsers,
+    pageBrowsers,
+    linkReferrers,
+    pageReferrers,
+    pageVisitTotals,
+    pageLinkClickTotals,
+  ] = await Promise.all([
+    Link.countDocuments({
+      userId: userObjectId,
+    }),
 
-  const inactiveLinks = await Link.countDocuments({
-    userId: userObjectId,
-    isActive: false,
-  });
+    ClickEvent.countDocuments({
+      userId: userObjectId,
+      ...clickDateMatch,
+    }),
 
-  const topLinks = await ClickEvent.aggregate([
-    {
-      $match: {
-        userId: userObjectId,
-        ...dateMatch,
+    Link.countDocuments({
+      userId: userObjectId,
+      isActive: true,
+    }),
+
+    Link.countDocuments({
+      userId: userObjectId,
+      isActive: false,
+    }),
+
+    Campaign.countDocuments({
+      userId: userObjectId,
+    }),
+
+    Page.countDocuments({
+      userId: userObjectId,
+    }),
+
+    PageVisit.countDocuments({
+      pageId: { $in: pageIds },
+      ...pageVisitDateMatch,
+    }),
+
+    PageLinkClick.countDocuments({
+      pageId: { $in: pageIds },
+      ...pageLinkClickDateMatch,
+    }),
+
+    ClickEvent.distinct("ipAddress", {
+      userId: userObjectId,
+      ipAddress: { $nin: [null, ""] },
+      ...clickDateMatch,
+    }),
+
+    PageVisit.distinct("ipAddress", {
+      pageId: { $in: pageIds },
+      ipAddress: { $nin: [null, ""] },
+      ...pageVisitDateMatch,
+    }),
+
+    ClickEvent.aggregate([
+      {
+        $match: {
+          userId: userObjectId,
+          ...clickDateMatch,
+        },
       },
-    },
-    {
-      $group: {
-        _id: "$linkId",
-        clicks: { $sum: 1 },
+      {
+        $group: {
+          _id: "$linkId",
+          clicks: { $sum: 1 },
+        },
       },
-    },
-    {
-      $sort: {
-        clicks: -1,
+      {
+        $sort: {
+          clicks: -1,
+        },
       },
-    },
-    {
-      $limit: 5,
-    },
-    {
-      $lookup: {
-        from: "links",
-        localField: "_id",
-        foreignField: "_id",
-        as: "link",
+      {
+        $limit: 5,
       },
-    },
-    {
-      $unwind: "$link",
-    },
-    {
-      $project: {
-        _id: 0,
-        linkId: "$_id",
-        originalUrl: "$link.originalUrl",
-        shortCode: "$link.shortCode",
-        isActive: "$link.isActive",
-        clicks: 1,
+      {
+        $lookup: {
+          from: "links",
+          localField: "_id",
+          foreignField: "_id",
+          as: "link",
+        },
       },
-    },
+      {
+        $unwind: "$link",
+      },
+      {
+        $project: {
+          _id: 0,
+          linkId: "$_id",
+          originalUrl: "$link.originalUrl",
+          shortCode: "$link.shortCode",
+          isActive: "$link.isActive",
+          clicks: 1,
+        },
+      },
+    ]),
+
+    ClickEvent.aggregate([
+      {
+        $match: {
+          userId: userObjectId,
+          ...clickDateMatch,
+        },
+      },
+      {
+        $lookup: {
+          from: "links",
+          localField: "linkId",
+          foreignField: "_id",
+          as: "link",
+        },
+      },
+      {
+        $unwind: "$link",
+      },
+      {
+        $match: {
+          "link.userId": userObjectId,
+          "link.campaignId": { $ne: null },
+        },
+      },
+      {
+        $group: {
+          _id: "$link.campaignId",
+          clicks: { $sum: 1 },
+        },
+      },
+      {
+        $sort: {
+          clicks: -1,
+        },
+      },
+      {
+        $limit: 5,
+      },
+      {
+        $lookup: {
+          from: "campaigns",
+          localField: "_id",
+          foreignField: "_id",
+          as: "campaign",
+        },
+      },
+      {
+        $unwind: "$campaign",
+      },
+      {
+        $project: {
+          _id: 0,
+          campaignId: "$_id",
+          name: "$campaign.name",
+          status: "$campaign.status",
+          clicks: 1,
+        },
+      },
+    ]),
+
+    ClickEvent.aggregate([
+      {
+        $match: {
+          userId: userObjectId,
+          ...clickDateMatch,
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: {
+              format: "%Y-%m-%d",
+              date: "$clickedAt",
+            },
+          },
+          clicks: {
+            $sum: 1,
+          },
+        },
+      },
+      {
+        $sort: {
+          _id: 1,
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          date: "$_id",
+          clicks: 1,
+        },
+      },
+    ]),
+
+    PageVisit.aggregate([
+      {
+        $match: {
+          pageId: { $in: pageIds },
+          ...pageVisitDateMatch,
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: {
+              format: "%Y-%m-%d",
+              date: "$visitedAt",
+            },
+          },
+          visits: {
+            $sum: 1,
+          },
+        },
+      },
+      {
+        $sort: {
+          _id: 1,
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          date: "$_id",
+          visits: 1,
+        },
+      },
+    ]),
+
+    ClickEvent.aggregate([
+      {
+        $match: {
+          userId: userObjectId,
+          ...clickDateMatch,
+        },
+      },
+      {
+        $group: {
+          _id: normalizeGroupLabel("device", "Unknown"),
+          total: {
+            $sum: 1,
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          name: "$_id",
+          total: 1,
+        },
+      },
+    ]),
+
+    PageVisit.aggregate([
+      {
+        $match: {
+          pageId: { $in: pageIds },
+          ...pageVisitDateMatch,
+        },
+      },
+      {
+        $group: {
+          _id: normalizeGroupLabel("device", "Unknown"),
+          total: {
+            $sum: 1,
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          name: "$_id",
+          total: 1,
+        },
+      },
+    ]),
+
+    ClickEvent.aggregate([
+      {
+        $match: {
+          userId: userObjectId,
+          ...clickDateMatch,
+        },
+      },
+      {
+        $group: {
+          _id: normalizeGroupLabel("browser", "Unknown"),
+          total: {
+            $sum: 1,
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          name: "$_id",
+          total: 1,
+        },
+      },
+    ]),
+
+    PageVisit.aggregate([
+      {
+        $match: {
+          pageId: { $in: pageIds },
+          ...pageVisitDateMatch,
+        },
+      },
+      {
+        $group: {
+          _id: normalizeGroupLabel("browser", "Unknown"),
+          total: {
+            $sum: 1,
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          name: "$_id",
+          total: 1,
+        },
+      },
+    ]),
+
+    ClickEvent.aggregate([
+      {
+        $match: {
+          userId: userObjectId,
+          ...clickDateMatch,
+        },
+      },
+      {
+        $group: {
+          _id: normalizeGroupLabel("referrer", "Direct"),
+          total: {
+            $sum: 1,
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          name: "$_id",
+          total: 1,
+        },
+      },
+    ]),
+
+    PageVisit.aggregate([
+      {
+        $match: {
+          pageId: { $in: pageIds },
+          ...pageVisitDateMatch,
+        },
+      },
+      {
+        $group: {
+          _id: normalizeGroupLabel("referrer", "Direct"),
+          total: {
+            $sum: 1,
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          name: "$_id",
+          total: 1,
+        },
+      },
+    ]),
+
+    PageVisit.aggregate([
+      {
+        $match: {
+          pageId: { $in: pageIds },
+          ...pageVisitDateMatch,
+        },
+      },
+      {
+        $group: {
+          _id: "$pageId",
+          visits: {
+            $sum: 1,
+          },
+        },
+      },
+    ]),
+
+    PageLinkClick.aggregate([
+      {
+        $match: {
+          pageId: { $in: pageIds },
+          ...pageLinkClickDateMatch,
+        },
+      },
+      {
+        $group: {
+          _id: "$pageId",
+          linkClicks: {
+            $sum: 1,
+          },
+        },
+      },
+    ]),
   ]);
+
+  const uniqueVisitorSet = new Set<string>();
+
+  for (const ip of linkVisitorIps) {
+    uniqueVisitorSet.add(String(ip));
+  }
+
+  for (const ip of pageVisitorIps) {
+    uniqueVisitorSet.add(String(ip));
+  }
+
+  const pageActivityMap = new Map<
+    string,
+    {
+      pageId: string;
+      visits: number;
+      linkClicks: number;
+    }
+  >();
+
+  for (const item of pageVisitTotals) {
+    const pageId = String(item._id);
+
+    pageActivityMap.set(pageId, {
+      pageId,
+      visits: item.visits,
+      linkClicks: 0,
+    });
+  }
+
+  for (const item of pageLinkClickTotals) {
+    const pageId = String(item._id);
+    const existing = pageActivityMap.get(pageId);
+
+    pageActivityMap.set(pageId, {
+      pageId,
+      visits: existing?.visits ?? 0,
+      linkClicks: item.linkClicks,
+    });
+  }
+
+  const topPageActivity = Array.from(pageActivityMap.values())
+    .sort((a, b) => b.visits + b.linkClicks - (a.visits + a.linkClicks))
+    .slice(0, 5);
+
+  const topPageIds = topPageActivity.map(
+    (item) => new Types.ObjectId(item.pageId),
+  );
+
+  const topPageDocuments = await Page.find({
+    _id: { $in: topPageIds },
+    userId: userObjectId,
+  })
+    .select("_id title slug")
+    .lean();
+
+  const topPageDocumentMap = new Map(
+    topPageDocuments.map((page) => [String(page._id), page]),
+  );
+
+  const topPages = topPageActivity
+    .map((item) => {
+      const page = topPageDocumentMap.get(item.pageId);
+
+      if (!page) {
+        return null;
+      }
+
+      return {
+        pageId: item.pageId,
+        title: page.title,
+        slug: page.slug,
+        visits: item.visits,
+        linkClicks: item.linkClicks,
+      };
+    })
+    .filter(Boolean);
+
+  const dailyActivity = mergeDailyActivity(dailyClicks, dailyVisits);
+
+  const devices = mergeBreakdownItems(
+    [...linkDevices, ...pageDevices],
+    "Unknown",
+  ).map((item) => ({
+    device: item.name,
+    total: item.total,
+  }));
+
+  const browsers = mergeBreakdownItems(
+    [...linkBrowsers, ...pageBrowsers],
+    "Unknown",
+  ).map((item) => ({
+    browser: item.name,
+    total: item.total,
+  }));
+
+  const referrers = mergeBreakdownItems(
+    [...linkReferrers, ...pageReferrers],
+    "Direct",
+  ).map((item) => ({
+    referrer: item.name,
+    total: item.total,
+  }));
+
+  const bioPageCtr =
+    totalPageVisits > 0
+      ? Math.round((totalPageLinkClicks / totalPageVisits) * 100)
+      : 0;
+
+  const conversionRate =
+    totalClicks + totalPageVisits > 0
+      ? Math.round(
+          ((totalClicks + totalPageLinkClicks) /
+            (totalClicks + totalPageVisits)) *
+            100,
+        )
+      : 0;
 
   return {
     totalLinks,
     totalClicks,
     activeLinks,
     inactiveLinks,
+
+    totalCampaigns,
+    totalPages,
+    totalPageVisits,
+    totalPageLinkClicks,
+    uniqueVisitors: uniqueVisitorSet.size,
+
+    bioPageCtr,
+    conversionRate,
+
+    dailyActivity,
+
     topLinks,
+    topCampaigns,
+    topPages,
+
+    devices,
+    browsers,
+    referrers,
   };
 };
 

@@ -87,8 +87,16 @@ const campaignIdValidationSchema = z.object({
   }),
 });
 
+const campaignLinkIdValidationSchema = z.object({
+  params: z.object({
+    id: z.string().regex(objectIdRegex, "Invalid campaign ID"),
+    linkId: z.string().regex(objectIdRegex, "Invalid link ID"),
+  }),
+});
+
 export const CampaignValidations = {
   createCampaignValidationSchema,
   updateCampaignValidationSchema,
   campaignIdValidationSchema,
+  campaignLinkIdValidationSchema,
 };

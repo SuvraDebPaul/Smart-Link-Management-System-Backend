@@ -13,9 +13,7 @@ const router = Router();
 
 router.post(
   "/",
-  flexibleAuth,
-  apiKeyBasedLimiter,
-  linkCreateLimiter,
+  auth("user", "admin"),
   validateRequest(ApiKeyValidations.createApiKeyValidationSchema),
   ApiKeyControllers.createApiKey,
 );

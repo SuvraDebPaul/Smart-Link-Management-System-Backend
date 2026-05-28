@@ -58,6 +58,90 @@ const getSingleCampaign = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getCampaignLinks = catchAsync(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError(401, "You are not authorized");
+  }
+
+  const { id } = req.params;
+
+  const result = await CampaignServices.getCampaignLinksFromDB(
+    id as string,
+    req.user.id,
+  );
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Campaign links retrieved successfully",
+    data: result,
+  });
+});
+
+const getAvailableLinksForCampaign = catchAsync(
+  async (req: Request, res: Response) => {
+    if (!req.user) {
+      throw new AppError(401, "You are not authorized");
+    }
+
+    const { id } = req.params;
+
+    const result = await CampaignServices.getAvailableLinksForCampaignFromDB(
+      id as string,
+      req.user.id,
+    );
+
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: "Available links retrieved successfully",
+      data: result,
+    });
+  },
+);
+
+const addLinkToCampaign = catchAsync(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError(401, "You are not authorized");
+  }
+
+  const { id, linkId } = req.params;
+
+  const result = await CampaignServices.addLinkToCampaignIntoDB(
+    id as string,
+    linkId as string,
+    req.user.id,
+  );
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Link added to campaign successfully",
+    data: result,
+  });
+});
+
+const removeLinkFromCampaign = catchAsync(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError(401, "You are not authorized");
+  }
+
+  const { id, linkId } = req.params;
+
+  const result = await CampaignServices.removeLinkFromCampaignFromDB(
+    id as string,
+    linkId as string,
+    req.user.id,
+  );
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Link removed from campaign successfully",
+    data: result,
+  });
+});
+
 const updateCampaign = catchAsync(async (req: Request, res: Response) => {
   if (!req.user) {
     throw new AppError(401, "You are not authorized");
@@ -103,6 +187,10 @@ export const CampaignControllers = {
   createCampaign,
   getMyCampaigns,
   getSingleCampaign,
+  getCampaignLinks,
+  getAvailableLinksForCampaign,
+  addLinkToCampaign,
+  removeLinkFromCampaign,
   updateCampaign,
   deleteCampaign,
 };

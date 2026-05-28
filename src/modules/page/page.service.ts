@@ -231,7 +231,7 @@ const getPublicPageBySlugFromDB = async (slug: string) => {
   const trackingLinks = activeLinks.map((link, index) => ({
     title: link.title,
     originalUrl: link.url,
-    clickUrl: `${config.base_url}/u/${page.slug}/click/${index}`,
+    clickUrl: `${config.base_url}/api/pages/public/${page.slug}/click/${index}`,
     order: link.order,
     isActive: link.isActive,
   }));

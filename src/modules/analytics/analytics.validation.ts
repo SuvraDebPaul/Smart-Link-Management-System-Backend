@@ -2,9 +2,15 @@ import { z } from "zod";
 
 const objectIdRegex = /^[0-9a-fA-F]{24}$/;
 
+const dateValueSchema = z
+  .string()
+  .refine((value) => !Number.isNaN(new Date(value).getTime()), {
+    message: "Invalid date",
+  });
+
 const dateQuerySchema = z.object({
-  startDate: z.string().datetime("Invalid startDate").optional(),
-  endDate: z.string().datetime("Invalid endDate").optional(),
+  startDate: dateValueSchema.optional(),
+  endDate: dateValueSchema.optional(),
 });
 
 const dateFilterSchema = z.object({

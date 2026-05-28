@@ -17,6 +17,19 @@ const buildCampaignResponse = (campaign: any) => {
   };
 };
 
+const ensureCampaignBelongsToUser = async (id: string, userId: string) => {
+  const campaign = await Campaign.findOne({
+    _id: new Types.ObjectId(id),
+    userId: new Types.ObjectId(userId),
+  });
+
+  if (!campaign) {
+    throw new AppError(404, "Campaign not found");
+  }
+
+  return campaign;
+};
+
 const createCampaignIntoDB = async (
   payload: {
     name: string;
@@ -52,14 +65,7 @@ const getMyCampaignsFromDB = async (userId: string) => {
 };
 
 const getSingleCampaignFromDB = async (id: string, userId: string) => {
-  const campaign = await Campaign.findOne({
-    _id: new Types.ObjectId(id),
-    userId: new Types.ObjectId(userId),
-  });
-
-  if (!campaign) {
-    throw new AppError(404, "Campaign not found");
-  }
+  const campaign = await ensureCampaignBelongsToUser(id, userId);
 
   const totalLinks = await Link.countDocuments({
     campaignId: campaign._id,
@@ -70,6 +76,85 @@ const getSingleCampaignFromDB = async (id: string, userId: string) => {
     ...buildCampaignResponse(campaign),
     totalLinks,
   };
+};
+
+const getCampaignLinksFromDB = async (id: string, userId: string) => {
+  const campaign = await ensureCampaignBelongsToUser(id, userId);
+
+  const links = await Link.find({
+    campaignId: campaign._id,
+    userId: new Types.ObjectId(userId),
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  return links;
+};
+
+const getAvailableLinksForCampaignFromDB = async (id: string, userId: string) => {
+  await ensureCampaignBelongsToUser(id, userId);
+
+  const links = await Link.find({
+    userId: new Types.ObjectId(userId),
+    campaignId: null,
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  return links;
+};
+
+const addLinkToCampaignIntoDB = async (
+  id: string,
+  linkId: string,
+  userId: string,
+) => {
+  const campaign = await ensureCampaignBelongsToUser(id, userId);
+
+  const link = await Link.findOne({
+    _id: new Types.ObjectId(linkId),
+    userId: new Types.ObjectId(userId),
+  });
+
+  if (!link) {
+    throw new AppError(404, "Link not found");
+  }
+
+  const currentCampaignId = link.campaignId?.toString();
+
+  if (currentCampaignId && currentCampaignId !== campaign._id.toString()) {
+    throw new AppError(400, "This link already belongs to another campaign");
+  }
+
+  link.campaignId = campaign._id;
+
+  const result = await link.save();
+
+  return result;
+};
+
+const removeLinkFromCampaignFromDB = async (
+  id: string,
+  linkId: string,
+  userId: string,
+) => {
+  const campaign = await ensureCampaignBelongsToUser(id, userId);
+
+  const link = await Link.findOne({
+    _id: new Types.ObjectId(linkId),
+    userId: new Types.ObjectId(userId),
+    campaignId: campaign._id,
+  });
+
+  if (!link) {
+    throw new AppError(404, "Link not found in this campaign");
+  }
+
+  link.campaignId = null;
+
+  const result = await link.save();
+
+  return result;
 };
 
 const updateCampaignIntoDB = async (
@@ -84,14 +169,7 @@ const updateCampaignIntoDB = async (
     goalClicks?: number | null;
   },
 ) => {
-  const campaign = await Campaign.findOne({
-    _id: new Types.ObjectId(id),
-    userId: new Types.ObjectId(userId),
-  });
-
-  if (!campaign) {
-    throw new AppError(404, "Campaign not found");
-  }
+  const campaign = await ensureCampaignBelongsToUser(id, userId);
 
   if (payload.name !== undefined) {
     campaign.name = payload.name;
@@ -151,6 +229,10 @@ export const CampaignServices = {
   createCampaignIntoDB,
   getMyCampaignsFromDB,
   getSingleCampaignFromDB,
+  getCampaignLinksFromDB,
+  getAvailableLinksForCampaignFromDB,
+  addLinkToCampaignIntoDB,
+  removeLinkFromCampaignFromDB,
   updateCampaignIntoDB,
   deleteCampaignFromDB,
 };

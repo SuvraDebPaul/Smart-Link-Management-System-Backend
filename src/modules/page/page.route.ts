@@ -6,6 +6,19 @@ import { validateRequest } from "../../middleware/validateRequest.js";
 
 const router = Router();
 
+router.get(
+  "/public/:slug",
+  validateRequest(PageValidations.publicPageValidationSchema),
+  PageControllers.getPublicPage,
+);
+
+/* --- Protected Dashboard Routes --- */
+router.get(
+  "/public/:slug/click/:linkIndex",
+  validateRequest(PageValidations.publicPageLinkClickValidationSchema),
+  PageControllers.redirectPublicPageLink,
+);
+
 router.post(
   "/",
   auth("user", "admin"),

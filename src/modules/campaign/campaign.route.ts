@@ -16,6 +16,34 @@ router.post(
 router.get("/", auth("user", "admin"), CampaignControllers.getMyCampaigns);
 
 router.get(
+  "/:id/links",
+  auth("user", "admin"),
+  validateRequest(CampaignValidations.campaignIdValidationSchema),
+  CampaignControllers.getCampaignLinks,
+);
+
+router.get(
+  "/:id/available-links",
+  auth("user", "admin"),
+  validateRequest(CampaignValidations.campaignIdValidationSchema),
+  CampaignControllers.getAvailableLinksForCampaign,
+);
+
+router.patch(
+  "/:id/links/:linkId/add",
+  auth("user", "admin"),
+  validateRequest(CampaignValidations.campaignLinkIdValidationSchema),
+  CampaignControllers.addLinkToCampaign,
+);
+
+router.patch(
+  "/:id/links/:linkId/remove",
+  auth("user", "admin"),
+  validateRequest(CampaignValidations.campaignLinkIdValidationSchema),
+  CampaignControllers.removeLinkFromCampaign,
+);
+
+router.get(
   "/:id",
   auth("user", "admin"),
   validateRequest(CampaignValidations.campaignIdValidationSchema),

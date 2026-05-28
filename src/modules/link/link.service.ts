@@ -26,7 +26,6 @@ const normalizeHost = (host: string) => {
   return host
     .toLowerCase()
     .replace(/^https?:\/\//, "")
-    .replace(/:\d+$/, "")
     .trim();
 };
 
@@ -66,6 +65,7 @@ const validateCampaignOwnership = async (
 
 const buildLinkResponse = (link: any) => {
   const domainDoc = link.domainId;
+
   const isDomainUsable =
     domainDoc &&
     typeof domainDoc === "object" &&
@@ -73,18 +73,32 @@ const buildLinkResponse = (link: any) => {
     domainDoc.status === "verified" &&
     domainDoc.isActive === true;
 
+  const defaultShortUrl = `${config.base_url}/${link.shortCode}`;
+
+  const customShortUrl = isDomainUsable
+    ? `https://${domainDoc.domain}/${link.shortCode}`
+    : null;
+
   return {
     id: link._id,
     campaignId: link.campaignId ?? null,
     domainId: domainDoc?._id ?? domainDoc ?? null,
 
+    domain: isDomainUsable
+      ? {
+          id: domainDoc._id,
+          domain: domainDoc.domain,
+          status: domainDoc.status,
+          isActive: domainDoc.isActive,
+        }
+      : null,
+
     originalUrl: link.originalUrl,
     shortCode: link.shortCode,
 
-    shortUrl: `${config.base_url}/${link.shortCode}`,
-    customShortUrl: isDomainUsable
-      ? `https://${domainDoc.domain}/${link.shortCode}`
-      : null,
+    shortUrl: customShortUrl || defaultShortUrl,
+    defaultShortUrl,
+    customShortUrl,
 
     clicks: link.clicks,
     isActive: link.isActive,
@@ -427,13 +441,14 @@ const generateQrCodeFromDB = async (id: string, userId: string) => {
   const link = await Link.findOne({
     _id: new Types.ObjectId(id),
     userId: new Types.ObjectId(userId),
-  });
+  }).populate("domainId");
 
   if (!link) {
     throw new AppError(404, "Link not found");
   }
 
-  const shortUrl = `${config.base_url}/${link.shortCode}`;
+  const linkResponse = buildLinkResponse(link);
+  const shortUrl = linkResponse.shortUrl;
 
   const qrCode = await QRCode.toDataURL(shortUrl, {
     type: "image/png",

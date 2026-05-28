@@ -38,7 +38,7 @@ router.delete(
 
 router.post(
   "/:id/verify",
-  auth("user", "admin"),
+  auth("admin"),
   validateRequest(DomainValidations.domainIdValidationSchema),
   DomainControllers.verifyDomainManually,
 );
