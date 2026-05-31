@@ -27,6 +27,7 @@ import { UserRoutes } from "./modules/user/user.route.js";
 import { BillingControllers } from "./modules/billing/billing.controller.js";
 import { BillingRoutes } from "./modules/billing/billing.route.js";
 import { NotificationRoutes } from "./modules/notification/notification.route.js";
+import { AdminRoutes } from "./modules/admin/admin.route.js";
 
 const app: Application = express();
 
@@ -71,6 +72,7 @@ app.use("/api/api-keys", ApiKeyRoutes);
 app.use("/api/users", UserRoutes);
 app.use("/api/billing", BillingRoutes);
 app.use("/api/notifications", NotificationRoutes);
+app.use("/api/admin", AdminRoutes);
 
 app.get("/:shortCode", redirectLimiter, LinkControllers.redirectLink);
 
