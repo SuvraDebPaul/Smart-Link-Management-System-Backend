@@ -4,10 +4,43 @@ import { AnalyticsServices } from "./analytics.service.js";
 import catchAsync from "../../utils/catchAsync.js";
 import sendResponse from "../../utils/sendResponse.js";
 
+import { PLAN_LIMITS } from "../../constants/planLimits.js";
+
 const getDateFilters = (req: Request) => {
+  if (!req.user) {
+    throw new AppError(401, "You are not authorized");
+  }
+
+  const startDate = req.query.startDate as string | undefined;
+  const endDate = req.query.endDate as string | undefined;
+
+  const hasPaidAccess =
+    req.user.plan === "free" ||
+    ["active", "trialing"].includes(req.user.subscriptionStatus);
+
+  const effectivePlan = hasPaidAccess ? req.user.plan : "free";
+  const historyDays = PLAN_LIMITS[effectivePlan].analyticsHistoryDays;
+
+  if (historyDays === "unlimited") {
+    return { startDate, endDate };
+  }
+
+  const earliestAllowedDate = new Date();
+  earliestAllowedDate.setUTCDate(
+    earliestAllowedDate.getUTCDate() - historyDays,
+  );
+  earliestAllowedDate.setUTCHours(0, 0, 0, 0);
+
+  if (startDate && new Date(startDate) < earliestAllowedDate) {
+    throw new AppError(
+      403,
+      `Your plan provides access to ${historyDays} days of analytics history.`,
+    );
+  }
+
   return {
-    startDate: req.query.startDate as string | undefined,
-    endDate: req.query.endDate as string | undefined,
+    startDate: startDate || earliestAllowedDate.toISOString(),
+    endDate,
   };
 };
 
@@ -18,7 +51,7 @@ const getOverview = catchAsync(async (req: Request, res: Response) => {
 
   const result = await AnalyticsServices.getAnalyticsOverviewFromDB(
     req.user.id,
-    req.query,
+    getDateFilters(req),
   );
 
   sendResponse(res, {
@@ -44,7 +77,7 @@ const getSingleLinkAnalytics = catchAsync(
     const result = await AnalyticsServices.getSingleLinkAnalyticsFromDB(
       linkId,
       req.user.id,
-      req.query,
+      getDateFilters(req),
     );
 
     sendResponse(res, {
@@ -70,7 +103,7 @@ const getDailyClicks = catchAsync(async (req: Request, res: Response) => {
   const result = await AnalyticsServices.getDailyClicksFromDB(
     linkId,
     req.user.id,
-    req.query,
+    getDateFilters(req),
   );
 
   sendResponse(res, {
@@ -95,7 +128,7 @@ const getDeviceAnalytics = catchAsync(async (req: Request, res: Response) => {
   const result = await AnalyticsServices.getDeviceAnalyticsFromDB(
     linkId,
     req.user.id,
-    req.query,
+    getDateFilters(req),
   );
 
   sendResponse(res, {
@@ -120,7 +153,7 @@ const getBrowserAnalytics = catchAsync(async (req: Request, res: Response) => {
   const result = await AnalyticsServices.getBrowserAnalyticsFromDB(
     linkId,
     req.user.id,
-    req.query,
+    getDateFilters(req),
   );
 
   sendResponse(res, {
@@ -145,7 +178,7 @@ const getReferrerAnalytics = catchAsync(async (req: Request, res: Response) => {
   const result = await AnalyticsServices.getReferrerAnalyticsFromDB(
     linkId,
     req.user.id,
-    req.query,
+    getDateFilters(req),
   );
 
   sendResponse(res, {

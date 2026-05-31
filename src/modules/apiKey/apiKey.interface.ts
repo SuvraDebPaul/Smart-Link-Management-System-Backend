@@ -6,6 +6,7 @@ export interface IApiKey {
   keyHash: string;
   keyPrefix: string;
   lastUsedAt?: Date;
+  expiresAt?: Date | null;
   isActive: boolean;
   createdAt?: Date;
   updatedAt?: Date;

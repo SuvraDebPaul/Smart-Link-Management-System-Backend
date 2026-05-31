@@ -2,15 +2,12 @@ import type { Request, Response } from "express";
 import catchAsync from "../../utils/catchAsync.js";
 import { ApiKeyServices } from "./apiKey.service.js";
 import sendResponse from "../../utils/sendResponse.js";
+import AppError from "../../errors/AppError.js";
 
 const createApiKey = catchAsync(async (req: Request, res: Response) => {
-  const user = req.user;
-  if (!user) throw new Error("Authenticated user not found");
-
-  const userId = user.id;
+  if (!req.user) throw new AppError(401, "You are not authorized");
   const { name } = req.body;
-
-  const result = await ApiKeyServices.createApiKeyIntoDB(userId, name);
+  const result = await ApiKeyServices.createApiKeyIntoDB(req.user, name);
 
   sendResponse(res, {
     statusCode: 201,
@@ -21,9 +18,10 @@ const createApiKey = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getMyApiKeys = catchAsync(async (req: Request, res: Response) => {
-  const user = req.user;
-  if (!user) throw new Error("Authenticated user not found");
-  const userId = user.id;
+  if (!req.user) {
+    throw new AppError(401, "You are not authorized");
+  }
+  const userId = req.user.id;
 
   const result = await ApiKeyServices.getMyApiKeysFromDB(userId);
 
@@ -36,12 +34,16 @@ const getMyApiKeys = catchAsync(async (req: Request, res: Response) => {
 });
 
 const revokeApiKey = catchAsync(async (req: Request, res: Response) => {
-  const user = req.user;
-  if (!user) throw new Error("Authenticated user not found");
-  const userId = user.id;
-  const { id } = req.params;
+  if (!req.user) {
+    throw new AppError(401, "You are not authorized");
+  }
+  const userId = req.user.id;
 
-  const result = await ApiKeyServices.revokeApiKeyFromDB(userId, id as string);
+  const { id } = req.params;
+  if (!id || typeof id !== "string") {
+    throw new AppError(400, "Valid API key id is required");
+  }
+  const result = await ApiKeyServices.revokeApiKeyFromDB(userId, id);
 
   sendResponse(res, {
     statusCode: 200,

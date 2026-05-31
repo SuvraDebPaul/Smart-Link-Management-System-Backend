@@ -9,7 +9,7 @@ const createDomain = catchAsync(async (req: Request, res: Response) => {
     throw new AppError(401, "You are not authorized");
   }
 
-  const result = await DomainServices.createDomainIntoDB(req.body, req.user.id);
+  const result = await DomainServices.createDomainIntoDB(req.body, req.user);
 
   sendResponse(res, {
     statusCode: 201,
@@ -62,12 +62,12 @@ const updateDomain = catchAsync(async (req: Request, res: Response) => {
 
   const { id } = req.params;
   if (!id || typeof id !== "string") {
-    throw new AppError(400, "Valid pageId is required");
+    throw new AppError(400, "Valid domain id is required");
   }
 
   const result = await DomainServices.updateDomainIntoDB(
     id,
-    req.user.id,
+    req.user,
     req.body,
   );
 
@@ -86,7 +86,7 @@ const deleteDomain = catchAsync(async (req: Request, res: Response) => {
 
   const { id } = req.params;
   if (!id || typeof id !== "string") {
-    throw new AppError(400, "Valid pageId is required");
+    throw new AppError(400, "Valid domain id is required");
   }
   const result = await DomainServices.deleteDomainFromDB(id, req.user.id);
 
@@ -105,7 +105,7 @@ const verifyDomainManually = catchAsync(async (req: Request, res: Response) => {
 
   const { id } = req.params;
   if (!id || typeof id !== "string") {
-    throw new AppError(400, "Valid pageId is required");
+    throw new AppError(400, "Valid domain id is required");
   }
   const result = await DomainServices.verifyDomainManuallyIntoDB(
     id,
@@ -126,11 +126,10 @@ const verifyDomainDns = catchAsync(async (req: Request, res: Response) => {
   }
 
   const { id } = req.params;
-
-  const result = await DomainServices.verifyDomainDnsIntoDB(
-    id as string,
-    req.user.id,
-  );
+  if (!id || typeof id !== "string") {
+    throw new AppError(400, "Valid domain id is required");
+  }
+  const result = await DomainServices.verifyDomainDnsIntoDB(id, req.user);
 
   sendResponse(res, {
     statusCode: 200,

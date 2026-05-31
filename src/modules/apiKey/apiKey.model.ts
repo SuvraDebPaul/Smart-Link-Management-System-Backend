@@ -32,6 +32,11 @@ const apiKeySchema = new Schema<IApiKey>(
       default: null,
     },
 
+    expiresAt: {
+      type: Date,
+      default: null,
+    },
+
     isActive: {
       type: Boolean,
       default: true,

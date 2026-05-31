@@ -3,14 +3,20 @@ import { z } from "zod";
 const objectIdRegex = /^[0-9a-fA-F]{24}$/;
 
 const slugRegex = /^[a-z0-9-]+$/;
+const httpUrlSchema = z.url("Please provide a valid URL").refine((value) => {
+  const protocol = new URL(value).protocol;
+  return protocol === "http:" || protocol === "https:";
+}, "Only HTTP and HTTPS URLs are allowed");
 
 const pageLinkSchema = z.object({
+  _id: z.string().regex(objectIdRegex, "Invalid page link ID").optional(),
+
   title: z
     .string()
     .min(1, "Link title is required")
     .max(80, "Link title must not be more than 80 characters"),
 
-  url: z.url("Please provide a valid link URL"),
+  url: httpUrlSchema,
 
   order: z
     .number()
@@ -43,7 +49,7 @@ const createPageValidationSchema = z.object({
       .nullable()
       .optional(),
 
-    avatarUrl: z.url("Please provide a valid avatar URL").nullable().optional(),
+    avatarUrl: httpUrlSchema.nullable().optional(),
 
     theme: z.enum(["light", "dark", "gradient"]).optional(),
 
@@ -85,10 +91,7 @@ const updatePageValidationSchema = z.object({
         .nullable()
         .optional(),
 
-      avatarUrl: z
-        .url("Please provide a valid avatar URL")
-        .nullable()
-        .optional(),
+      avatarUrl: httpUrlSchema.nullable().optional(),
 
       theme: z.enum(["light", "dark", "gradient"]).optional(),
 
@@ -134,7 +137,7 @@ const publicPageLinkClickValidationSchema = z.object({
       .max(40, "Slug must not be more than 40 characters")
       .regex(slugRegex, "Invalid page slug"),
 
-    linkIndex: z.string().regex(/^\d+$/, "Link index must be a number"),
+    linkId: z.string().regex(objectIdRegex, "Invalid page link ID"),
   }),
 });
 

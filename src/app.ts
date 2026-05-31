@@ -9,24 +9,47 @@ import config from "./config/index.js";
 import morgan from "morgan";
 import { notFound } from "./middleware/notFound.js";
 import { globalErrorHandler } from "./middleware/globalErrorHandler.js";
-import { AuthRoutes } from "./modules/auth/auth.route.js";
 import { LinkRoutes } from "./modules/link/link.route.js";
 import { LinkControllers } from "./modules/link/link.controller.js";
 import { AnalyticsRoutes } from "./modules/analytics/analytics.route.js";
 import { CampaignRoutes } from "./modules/campaign/campaign.route.js";
 import { PageRoutes } from "./modules/page/page.route.js";
-import { validateRequest } from "./middleware/validateRequest.js";
-import { PageValidations } from "./modules/page/page.validation.js";
-import { PageControllers } from "./modules/page/page.controller.js";
 import { DomainRoutes } from "./modules/domain/domain.route.js";
 import { ApiKeyRoutes } from "./modules/apiKey/apiKey.route.js";
-import { globalApiLimiter, redirectLimiter } from "./middleware/rateLimit.js";
-import botProtection from "./middleware/botProtection.js";
+import {
+  authLimiter,
+  globalApiLimiter,
+  redirectLimiter,
+} from "./middleware/rateLimit.js";
+import { toNodeHandler } from "better-auth/node";
+import { betterAuthInstance } from "./modules/auth/better-auth.js";
+import { UserRoutes } from "./modules/user/user.route.js";
+import { BillingControllers } from "./modules/billing/billing.controller.js";
+import { BillingRoutes } from "./modules/billing/billing.route.js";
+import { NotificationRoutes } from "./modules/notification/notification.route.js";
 
 const app: Application = express();
 
+app.set("trust proxy", config.trust_proxy_hops);
+
 app.use(helmet());
-app.use(cors());
+app.use(
+  cors({
+    origin: config.frontend_url,
+    credentials: true,
+  }),
+);
+
+app.use("/api/auth/sign-in/email", authLimiter);
+app.use("/api/auth/sign-up/email", authLimiter);
+app.all("/api/auth/*splat", toNodeHandler(betterAuthInstance));
+
+app.post(
+  "/api/billing/webhook",
+  express.raw({ type: "application/json" }),
+  BillingControllers.handleStripeWebhook,
+);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -39,32 +62,17 @@ app.get("/", (req: Request, res: Response) => {
 });
 
 app.use("/api", globalApiLimiter);
-app.use("/api/auth", AuthRoutes);
 app.use("/api/links", LinkRoutes);
 app.use("/api/analytics", AnalyticsRoutes);
 app.use("/api/campaigns", CampaignRoutes);
 app.use("/api/pages", PageRoutes);
 app.use("/api/domains", DomainRoutes);
 app.use("/api/api-keys", ApiKeyRoutes);
+app.use("/api/users", UserRoutes);
+app.use("/api/billing", BillingRoutes);
+app.use("/api/notifications", NotificationRoutes);
 
-app.get(
-  "/u/:slug/click/:linkIndex",
-  validateRequest(PageValidations.publicPageLinkClickValidationSchema),
-  PageControllers.redirectPublicPageLink,
-);
-
-app.get(
-  "/u/:slug",
-  validateRequest(PageValidations.publicPageValidationSchema),
-  PageControllers.getPublicPage,
-);
-
-app.get(
-  "/:shortCode",
-  redirectLimiter,
-  botProtection,
-  LinkControllers.redirectLink,
-);
+app.get("/:shortCode", redirectLimiter, LinkControllers.redirectLink);
 
 app.use(notFound);
 app.use(globalErrorHandler);

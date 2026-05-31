@@ -4,6 +4,9 @@ import AppError from "../../errors/AppError.js";
 import { Domain } from "./domain.model.js";
 import { Link } from "../link/link.model.js";
 import dns from "node:dns/promises";
+import type { TAuthUser } from "../user/user.interface.js";
+import { checkPlanLimit } from "../../utils/checkPlanLimit.js";
+import { NotificationServices } from "../notification/notification.service.js";
 
 const normalizeDomain = (domain: string) => {
   return domain
@@ -11,6 +14,20 @@ const normalizeDomain = (domain: string) => {
     .replace(/^https?:\/\//, "")
     .replace(/\/$/, "")
     .trim();
+};
+
+const notifyDomainVerificationFailed = async (
+  userId: Types.ObjectId,
+  domainId: Types.ObjectId,
+  domain: string,
+) => {
+  await NotificationServices.createNotification({
+    userId,
+    type: "domain-verification-failed",
+    title: "Domain verification failed",
+    message: `DNS verification failed for ${domain}. Check the TXT record and try again.`,
+    eventKey: `domain-verification-failed:${domainId.toString()}`,
+  });
 };
 
 const buildDomainResponse = (domain: any) => {
@@ -34,8 +51,18 @@ const createDomainIntoDB = async (
   payload: {
     domain: string;
   },
-  userId: string,
+  userPayload: TAuthUser,
 ) => {
+  const userObjectId = new Types.ObjectId(userPayload.id);
+  const totalDomains = await Domain.countDocuments({
+    userId: userObjectId,
+  });
+  checkPlanLimit({
+    plan: userPayload.plan,
+    subscriptionStatus: userPayload.subscriptionStatus,
+    key: "customDomains",
+    currentUsage: totalDomains,
+  });
   const normalizedDomain = normalizeDomain(payload.domain);
 
   const existingDomain = await Domain.findOne({
@@ -49,11 +76,11 @@ const createDomainIntoDB = async (
   const verificationToken = `smartlink-verify-${nanoid(16)}`;
 
   const result = await Domain.create({
-    userId: new Types.ObjectId(userId),
+    userId: userObjectId,
     domain: normalizedDomain,
     status: "pending",
     verificationToken,
-    isActive: true,
+    isActive: false,
   });
 
   return buildDomainResponse(result);
@@ -84,18 +111,37 @@ const getSingleDomainFromDB = async (id: string, userId: string) => {
 
 const updateDomainIntoDB = async (
   id: string,
-  userId: string,
+  userPayload: TAuthUser,
   payload: {
     isActive?: boolean;
   },
 ) => {
+  const userObjectId = new Types.ObjectId(userPayload.id);
+
   const domain = await Domain.findOne({
     _id: new Types.ObjectId(id),
-    userId: new Types.ObjectId(userId),
+    userId: userObjectId,
   });
 
   if (!domain) {
     throw new AppError(404, "Domain not found");
+  }
+  if (payload.isActive === true && domain.status !== "verified") {
+    throw new AppError(400, "Verify the domain before activating it");
+  }
+
+  if (payload.isActive === true && !domain.isActive) {
+    const totalActiveDomains = await Domain.countDocuments({
+      userId: userObjectId,
+      isActive: true,
+    });
+
+    checkPlanLimit({
+      plan: userPayload.plan,
+      subscriptionStatus: userPayload.subscriptionStatus,
+      key: "customDomains",
+      currentUsage: totalActiveDomains,
+    });
   }
 
   if (typeof payload.isActive === "boolean") {
@@ -150,10 +196,12 @@ const verifyDomainManuallyIntoDB = async (id: string, userId: string) => {
   return buildDomainResponse(result);
 };
 
-const verifyDomainDnsIntoDB = async (id: string, userId: string) => {
+const verifyDomainDnsIntoDB = async (id: string, userPayload: TAuthUser) => {
+  const userObjectId = new Types.ObjectId(userPayload.id);
+
   const domain = await Domain.findOne({
     _id: new Types.ObjectId(id),
-    userId: new Types.ObjectId(userId),
+    userId: userObjectId,
   });
 
   if (!domain) {
@@ -170,11 +218,30 @@ const verifyDomainDnsIntoDB = async (id: string, userId: string) => {
     if (!isVerified) {
       domain.status = "failed";
       await domain.save();
+      await notifyDomainVerificationFailed(
+        userObjectId,
+        domain._id,
+        domain.domain,
+      );
 
       throw new AppError(
         400,
         "DNS TXT record not found. Please add the verification token and try again.",
       );
+    }
+
+    if (!domain.isActive) {
+      const totalActiveDomains = await Domain.countDocuments({
+        userId: userObjectId,
+        isActive: true,
+      });
+
+      checkPlanLimit({
+        plan: userPayload.plan,
+        subscriptionStatus: userPayload.subscriptionStatus,
+        key: "customDomains",
+        currentUsage: totalActiveDomains,
+      });
     }
 
     domain.status = "verified";
@@ -190,6 +257,7 @@ const verifyDomainDnsIntoDB = async (id: string, userId: string) => {
 
     domain.status = "failed";
     await domain.save();
+    await notifyDomainVerificationFailed(userObjectId, domain._id, domain.domain);
 
     throw new AppError(
       400,

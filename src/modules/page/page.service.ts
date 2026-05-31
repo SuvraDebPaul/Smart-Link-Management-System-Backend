@@ -2,6 +2,8 @@ import { Types } from "mongoose";
 import config from "../../config/index.js";
 import AppError from "../../errors/AppError.js";
 import { Page } from "./page.model.js";
+import type { TAuthUser } from "../user/user.interface.js";
+import { checkPlanLimit } from "../../utils/checkPlanLimit.js";
 
 const reservedPageSlugs = [
   "api",
@@ -25,7 +27,7 @@ const buildPageResponse = (page: any) => {
   return {
     id: page._id,
     slug: page.slug,
-    pageUrl: `${config.base_url}/u/${page.slug}`,
+    pageUrl: `${config.frontend_url}/u/${page.slug}`,
     title: page.title,
     bio: page.bio ?? null,
     avatarUrl: page.avatarUrl ?? null,
@@ -53,8 +55,18 @@ const createPageIntoDB = async (
     }[];
     isPublished?: boolean;
   },
-  userId: string,
+  userPayload: TAuthUser,
 ) => {
+  const userObjectId = new Types.ObjectId(userPayload.id);
+  const totalPages = await Page.countDocuments({
+    userId: userObjectId,
+  });
+  checkPlanLimit({
+    plan: userPayload.plan,
+    subscriptionStatus: userPayload.subscriptionStatus,
+    key: "bioPages",
+    currentUsage: totalPages,
+  });
   const slug = payload.slug.toLowerCase();
 
   if (reservedPageSlugs.includes(slug)) {
@@ -79,7 +91,7 @@ const createPageIntoDB = async (
     })) ?? [];
 
   const result = await Page.create({
-    userId: new Types.ObjectId(userId),
+    userId: userObjectId,
     slug,
     title: payload.title,
     bio: payload.bio ?? null,
@@ -125,6 +137,7 @@ const updatePageIntoDB = async (
     avatarUrl?: string | null;
     theme?: "light" | "dark" | "gradient";
     links?: {
+      _id?: string;
       title: string;
       url: string;
       order?: number;
@@ -182,6 +195,7 @@ const updatePageIntoDB = async (
 
   if (payload.links !== undefined) {
     page.links = payload.links.map((link, index) => ({
+      _id: link._id ? new Types.ObjectId(link._id) : new Types.ObjectId(),
       title: link.title,
       url: link.url,
       order: link.order ?? index,
@@ -212,26 +226,34 @@ const deletePageFromDB = async (id: string, userId: string) => {
 };
 
 const getPublicPageBySlugFromDB = async (slug: string) => {
-  const page = await Page.findOne({
-    slug: slug.toLowerCase(),
-    isPublished: true,
-  });
+  const page = await Page.findOneAndUpdate(
+    {
+      slug: slug.toLowerCase(),
+      isPublished: true,
+    },
+    {
+      $inc: { visits: 1 },
+    },
+    {
+      new: true,
+    },
+  );
 
   if (!page) {
     throw new AppError(404, "Page not found or unpublished");
   }
-
-  page.visits += 1;
+  // Persist embedded link IDs for pages created before link IDs were enabled.
+  page.markModified("links");
   await page.save();
 
   const activeLinks = page.links
     .filter((link) => link.isActive)
     .sort((a, b) => a.order - b.order);
 
-  const trackingLinks = activeLinks.map((link, index) => ({
+  const trackingLinks = activeLinks.map((link) => ({
     title: link.title,
     originalUrl: link.url,
-    clickUrl: `${config.base_url}/api/pages/public/${page.slug}/click/${index}`,
+    clickUrl: `${config.base_url}/api/pages/public/${page.slug}/click/${link._id}`,
     order: link.order,
     isActive: link.isActive,
   }));
@@ -251,7 +273,7 @@ const getPublicPageBySlugFromDB = async (slug: string) => {
 
 const getPublicPageLinkForRedirectFromDB = async (
   slug: string,
-  linkIndex: number,
+  linkId: string,
 ) => {
   const page = await Page.findOne({
     slug: slug.toLowerCase(),
@@ -265,6 +287,10 @@ const getPublicPageLinkForRedirectFromDB = async (
   const activeLinks = page.links
     .filter((link) => link.isActive)
     .sort((a, b) => a.order - b.order);
+
+  const linkIndex = activeLinks.findIndex(
+    (link) => link._id.toString() === linkId,
+  );
 
   const selectedLink = activeLinks[linkIndex];
 

@@ -1,35 +1,30 @@
 import { model, Schema } from "mongoose";
 import type { IPage, IPageLink } from "./page.interface.js";
 
-const pageLinkSchema = new Schema<IPageLink>(
-  {
-    title: {
-      type: String,
-      required: [true, "Link title is required"],
-      trim: true,
-    },
-
-    url: {
-      type: String,
-      required: [true, "Link URL is required"],
-      trim: true,
-    },
-
-    order: {
-      type: Number,
-      required: [true, "Link order is required"],
-      default: 0,
-    },
-
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
+const pageLinkSchema = new Schema<IPageLink>({
+  title: {
+    type: String,
+    required: [true, "Link title is required"],
+    trim: true,
   },
-  {
-    _id: false,
+
+  url: {
+    type: String,
+    required: [true, "Link URL is required"],
+    trim: true,
   },
-);
+
+  order: {
+    type: Number,
+    required: [true, "Link order is required"],
+    default: 0,
+  },
+
+  isActive: {
+    type: Boolean,
+    default: true,
+  },
+});
 
 const pageSchema = new Schema<IPage>(
   {

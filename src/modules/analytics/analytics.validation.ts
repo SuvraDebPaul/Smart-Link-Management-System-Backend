@@ -8,10 +8,24 @@ const dateValueSchema = z
     message: "Invalid date",
   });
 
-const dateQuerySchema = z.object({
-  startDate: dateValueSchema.optional(),
-  endDate: dateValueSchema.optional(),
-});
+const dateQuerySchema = z
+  .object({
+    startDate: dateValueSchema.optional(),
+    endDate: dateValueSchema.optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (
+      data.startDate &&
+      data.endDate &&
+      new Date(data.endDate) < new Date(data.startDate)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["endDate"],
+        message: "End date cannot be before start date",
+      });
+    }
+  });
 
 const dateFilterSchema = z.object({
   query: dateQuerySchema,

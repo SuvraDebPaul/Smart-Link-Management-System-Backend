@@ -5,8 +5,13 @@ import { Link } from "./link.model.js";
 import config from "../../config/index.js";
 import bcrypt from "bcrypt";
 import QRCode from "qrcode";
+import { User } from "../user/user.model.js";
+import { PLAN_LIMITS } from "../../constants/planLimits.js";
 import { Campaign } from "../campaign/campaign.model.js";
 import { Domain } from "../domain/domain.model.js";
+import type { TAuthUser } from "../user/user.interface.js";
+import { checkPlanLimit } from "../../utils/checkPlanLimit.js";
+import { NotificationServices } from "../notification/notification.service.js";
 
 const reservedAliases = [
   "api",
@@ -26,6 +31,7 @@ const normalizeHost = (host: string) => {
   return host
     .toLowerCase()
     .replace(/^https?:\/\//, "")
+    .replace(/:\d+$/, "")
     .trim();
 };
 
@@ -63,7 +69,7 @@ const validateCampaignOwnership = async (
   return campaign;
 };
 
-const buildLinkResponse = (link: any) => {
+export const buildLinkResponse = (link: any) => {
   const domainDoc = link.domainId;
 
   const isDomainUsable =
@@ -124,6 +130,64 @@ const validateLinkAvailability = (link: any) => {
     throw new AppError(410, "This link has reached maximum click limit");
   }
 };
+const incrementLinkClicks = async (linkId: Types.ObjectId) => {
+  const updatedLink = await Link.findOneAndUpdate(
+    {
+      _id: linkId,
+      isActive: true,
+      $and: [
+        {
+          $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }],
+        },
+        {
+          $or: [
+            { maxClicks: null },
+            { $expr: { $lt: ["$clicks", "$maxClicks"] } },
+          ],
+        },
+      ],
+    },
+    { $inc: { clicks: 1 } },
+    { new: true },
+  );
+
+  if (!updatedLink) {
+    throw new AppError(410, "This link is no longer available");
+  }
+
+  if (updatedLink.maxClicks && updatedLink.clicks === updatedLink.maxClicks) {
+    await NotificationServices.createNotification({
+      userId: updatedLink.userId,
+      type: "link-max-clicks",
+      title: "Link reached its click limit",
+      message: `Your short link ${updatedLink.shortCode} reached ${updatedLink.maxClicks} clicks.`,
+      eventKey: `link-max-clicks:${updatedLink._id.toString()}:${updatedLink.maxClicks}`,
+    });
+  }
+
+  if (updatedLink.campaignId) {
+    const campaign = await Campaign.findById(updatedLink.campaignId);
+
+    if (campaign?.goalClicks) {
+      const [{ totalClicks = 0 } = {}] = await Link.aggregate<{
+        totalClicks: number;
+      }>([
+        { $match: { campaignId: campaign._id } },
+        { $group: { _id: null, totalClicks: { $sum: "$clicks" } } },
+      ]);
+
+      if (totalClicks >= campaign.goalClicks) {
+        await NotificationServices.createNotification({
+          userId: campaign.userId,
+          type: "campaign-goal",
+          title: "Campaign goal reached",
+          message: `${campaign.name} reached its ${campaign.goalClicks}-click goal.`,
+          eventKey: `campaign-goal:${campaign._id.toString()}:${campaign.goalClicks}`,
+        });
+      }
+    }
+  }
+};
 
 const createLinkIntoDB = async (
   payload: {
@@ -135,8 +199,19 @@ const createLinkIntoDB = async (
     campaignId?: string | null;
     domainId?: string | null;
   },
-  userId: string,
+  userPayload: TAuthUser,
 ) => {
+  const userObjectId = new Types.ObjectId(userPayload.id);
+  const totalLinks = await Link.countDocuments({
+    userId: userObjectId,
+  });
+  checkPlanLimit({
+    plan: userPayload.plan,
+    subscriptionStatus: userPayload.subscriptionStatus,
+    key: "links",
+    currentUsage: totalLinks,
+  });
+
   let shortCode = payload.customAlias || generateShortCode();
   let domainObjectId = null;
   let passwordHash: string | null = null;
@@ -147,7 +222,7 @@ const createLinkIntoDB = async (
   }
 
   if (payload.domainId) {
-    await validateDomainOwnership(payload.domainId, userId);
+    await validateDomainOwnership(payload.domainId, userPayload.id);
     domainObjectId = new Types.ObjectId(payload.domainId);
   }
 
@@ -165,12 +240,12 @@ const createLinkIntoDB = async (
   }
 
   if (payload.campaignId) {
-    await validateCampaignOwnership(payload.campaignId, userId);
+    await validateCampaignOwnership(payload.campaignId, userPayload.id);
     campaignObjectId = new Types.ObjectId(payload.campaignId);
   }
 
   const result = await Link.create({
-    userId: new Types.ObjectId(userId),
+    userId: userObjectId,
     campaignId: campaignObjectId,
     domainId: domainObjectId,
     originalUrl: payload.originalUrl,
@@ -323,37 +398,6 @@ const deleteLinkFromDB = async (id: string, userId: string) => {
   return buildLinkResponse(result);
 };
 
-const redirectLinkFromDB = async (shortCode: string) => {
-  const link = await Link.findOne({ shortCode });
-
-  if (!link) {
-    throw new AppError(404, "Short link not found");
-  }
-
-  validateLinkAvailability(link);
-
-  if (link.isPasswordProtected) {
-    return {
-      requiresPassword: true,
-      shortCode: link.shortCode,
-      originalUrl: null,
-      linkId: link._id,
-      userId: link.userId,
-    };
-  }
-
-  link.clicks += 1;
-  await link.save();
-
-  return {
-    requiresPassword: false,
-    shortCode: link.shortCode,
-    originalUrl: link.originalUrl,
-    linkId: link._id,
-    userId: link.userId,
-  };
-};
-
 const redirectLinkByHostFromDB = async (shortCode: string, host: string) => {
   const normalizedHost = normalizeHost(host);
 
@@ -363,19 +407,15 @@ const redirectLinkByHostFromDB = async (shortCode: string, host: string) => {
     isActive: true,
   });
 
-  let link;
-
-  if (domain) {
-    link = await Link.findOne({
-      shortCode,
-      domainId: domain._id,
-    });
-  } else {
-    link = await Link.findOne({
-      shortCode,
-      domainId: null,
-    });
+  const isDefaultHost = normalizedHost === normalizeHost(config.base_url);
+  if (!domain && !isDefaultHost) {
+    throw new AppError(404, "Domain not found");
   }
+
+  const link = await Link.findOne({
+    shortCode,
+    domainId: domain?._id ?? null,
+  });
 
   if (!link) {
     throw new AppError(404, "Short link not found");
@@ -393,8 +433,7 @@ const redirectLinkByHostFromDB = async (shortCode: string, host: string) => {
     };
   }
 
-  link.clicks += 1;
-  await link.save();
+  await incrementLinkClicks(link._id);
 
   return {
     requiresPassword: false,
@@ -408,8 +447,25 @@ const redirectLinkByHostFromDB = async (shortCode: string, host: string) => {
 const unlockPasswordProtectedLinkFromDB = async (
   shortCode: string,
   password: string,
+  host: string,
 ) => {
-  const link = await Link.findOne({ shortCode }).select("+passwordHash");
+  const normalizedHost = normalizeHost(host);
+
+  const domain = await Domain.findOne({
+    domain: normalizedHost,
+    status: "verified",
+    isActive: true,
+  });
+  const isDefaultHost = normalizedHost === normalizeHost(config.base_url);
+
+  if (!domain && !isDefaultHost) {
+    throw new AppError(404, "Domain not found");
+  }
+
+  const link = await Link.findOne({
+    shortCode,
+    domainId: domain?._id ?? null,
+  }).select("+passwordHash");
 
   if (!link) {
     throw new AppError(404, "Short link not found");
@@ -426,8 +482,7 @@ const unlockPasswordProtectedLinkFromDB = async (
   if (!isPasswordMatched) {
     throw new AppError(401, "Invalid password");
   }
-  link.clicks += 1;
-  await link.save();
+  await incrementLinkClicks(link._id);
 
   return {
     originalUrl: link.originalUrl,
@@ -449,16 +504,41 @@ const generateQrCodeFromDB = async (id: string, userId: string) => {
 
   const linkResponse = buildLinkResponse(link);
   const shortUrl = linkResponse.shortUrl;
+  const user = await User.findById(userId).select("plan qrDefaultPreferences");
+  const preferences =
+    user && PLAN_LIMITS[user.plan].qrCustomization === "advanced"
+      ? user.qrDefaultPreferences
+      : undefined;
+  const foregroundColor = preferences?.foregroundColor ?? "#0ea5e9";
+  const backgroundColor = preferences?.backgroundColor ?? "#ffffff";
+  const size = preferences?.size ?? 500;
+  const downloadFormat = preferences?.downloadFormat ?? "png";
 
-  const qrCode = await QRCode.toDataURL(shortUrl, {
-    type: "image/png",
-    margin: 2,
-    width: 500,
-  });
+  const qrCode =
+    downloadFormat === "svg"
+      ? await QRCode.toString(shortUrl, {
+          type: "svg",
+          margin: 2,
+          width: size,
+          color: {
+            dark: foregroundColor,
+            light: backgroundColor,
+          },
+        })
+      : await QRCode.toDataURL(shortUrl, {
+          type: "image/png",
+          margin: 2,
+          width: size,
+          color: {
+            dark: foregroundColor,
+            light: backgroundColor,
+          },
+        });
 
   return {
     shortUrl,
     qrCode,
+    downloadFormat,
   };
 };
 
@@ -468,7 +548,6 @@ export const LinkServices = {
   getSingleLinkFromDB,
   updateLinkIntoDB,
   deleteLinkFromDB,
-  redirectLinkFromDB,
   redirectLinkByHostFromDB,
   unlockPasswordProtectedLinkFromDB,
   generateQrCodeFromDB,

@@ -14,7 +14,7 @@ router.get(
 
 /* --- Protected Dashboard Routes --- */
 router.get(
-  "/public/:slug/click/:linkIndex",
+  "/public/:slug/click/:linkId",
   validateRequest(PageValidations.publicPageLinkClickValidationSchema),
   PageControllers.redirectPublicPageLink,
 );

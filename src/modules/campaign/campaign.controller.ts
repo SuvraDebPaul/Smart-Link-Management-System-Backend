@@ -12,7 +12,7 @@ const createCampaign = catchAsync(async (req: Request, res: Response) => {
 
   const result = await CampaignServices.createCampaignIntoDB(
     req.body,
-    req.user.id,
+    req.user,
   );
 
   sendResponse(res, {
@@ -121,26 +121,28 @@ const addLinkToCampaign = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
-const removeLinkFromCampaign = catchAsync(async (req: Request, res: Response) => {
-  if (!req.user) {
-    throw new AppError(401, "You are not authorized");
-  }
+const removeLinkFromCampaign = catchAsync(
+  async (req: Request, res: Response) => {
+    if (!req.user) {
+      throw new AppError(401, "You are not authorized");
+    }
 
-  const { id, linkId } = req.params;
+    const { id, linkId } = req.params;
 
-  const result = await CampaignServices.removeLinkFromCampaignFromDB(
-    id as string,
-    linkId as string,
-    req.user.id,
-  );
+    const result = await CampaignServices.removeLinkFromCampaignFromDB(
+      id as string,
+      linkId as string,
+      req.user.id,
+    );
 
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: "Link removed from campaign successfully",
-    data: result,
-  });
-});
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: "Link removed from campaign successfully",
+      data: result,
+    });
+  },
+);
 
 const updateCampaign = catchAsync(async (req: Request, res: Response) => {
   if (!req.user) {

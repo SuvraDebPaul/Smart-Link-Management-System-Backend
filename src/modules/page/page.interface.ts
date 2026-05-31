@@ -3,6 +3,7 @@ import { Types } from "mongoose";
 export type TPageTheme = "light" | "dark" | "gradient";
 
 export interface IPageLink {
+  _id: Types.ObjectId;
   title: string;
   url: string;
   order: number;

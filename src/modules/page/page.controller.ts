@@ -11,7 +11,7 @@ const createPage = catchAsync(async (req: Request, res: Response) => {
     throw new AppError(401, "You are not authorized");
   }
 
-  const result = await PageServices.createPageIntoDB(req.body, req.user.id);
+  const result = await PageServices.createPageIntoDB(req.body, req.user);
 
   sendResponse(res, {
     statusCode: 201,
@@ -112,10 +112,12 @@ const getPublicPage = catchAsync(async (req: Request, res: Response) => {
 
   const result = await PageServices.getPublicPageBySlugFromDB(slug);
 
-  await createPageVisit(req, {
+  void createPageVisit(req, {
     pageId: result.pageId,
     userId: result.userId,
     slug: result.slug,
+  }).catch((error) => {
+    console.error("Failed to record page visit", error);
   });
 
   sendResponse(res, {
@@ -136,30 +138,30 @@ const getPublicPage = catchAsync(async (req: Request, res: Response) => {
 
 const redirectPublicPageLink = catchAsync(
   async (req: Request, res: Response) => {
-    const { slug, linkIndex } = req.params;
+    const { slug, linkId } = req.params;
 
     if (!slug || typeof slug !== "string") {
       throw new AppError(400, "Page slug is required");
     }
 
-    const parsedLinkIndex = Number(linkIndex);
-
-    if (Number.isNaN(parsedLinkIndex)) {
-      throw new AppError(400, "Invalid link index");
+    if (!linkId || typeof linkId !== "string") {
+      throw new AppError(400, "Page link ID is required");
     }
 
     const result = await PageServices.getPublicPageLinkForRedirectFromDB(
       slug,
-      parsedLinkIndex,
+      linkId,
     );
 
-    await createPageLinkClick(req, {
+    void createPageLinkClick(req, {
       pageId: result.pageId,
       userId: result.userId,
       slug: result.slug,
       linkIndex: result.linkIndex,
       linkTitle: result.linkTitle,
       linkUrl: result.linkUrl,
+    }).catch((error) => {
+      console.error("Failed to record page link click", error);
     });
 
     res.redirect(result.linkUrl);

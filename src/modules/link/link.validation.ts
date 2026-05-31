@@ -1,11 +1,23 @@
 import z from "zod";
 
 const objectRegex = /^[0-9a-fA-F]{24}$/;
+const httpUrlSchema = z.url("Please provide a valid URL").refine((value) => {
+  const protocol = new URL(value).protocol;
+  return protocol === "http:" || protocol === "https:";
+}, "Only HTTP and HTTPS URLs are allowed");
 
 const createLinkValidationSchema = z.object({
   body: z.object({
-    originalUrl: z.url("Please provide a valid url"),
-    customAlias: z.string().min(3).max(30).optional(),
+    originalUrl: httpUrlSchema,
+    customAlias: z
+      .string()
+      .min(3)
+      .max(30)
+      .regex(
+        /^[a-zA-Z0-9-]+$/,
+        "Alias can contain only letters, numbers, and hyphens",
+      )
+      .optional(),
     password: z
       .string()
       .min(4, "Password must be at least 4 characters")
@@ -42,8 +54,16 @@ const updateLinkValidationSchema = z.object({
 
   body: z
     .object({
-      originalUrl: z.url("Please provide a valid URL").optional(),
-      customAlias: z.string().min(3).max(30).optional(),
+      originalUrl: httpUrlSchema.optional(),
+      customAlias: z
+        .string()
+        .min(3)
+        .max(30)
+        .regex(
+          /^[a-zA-Z0-9-]+$/,
+          "Alias can contain only letters, numbers, and hyphens",
+        )
+        .optional(),
       isActive: z.boolean().optional(),
       password: z
         .string()
@@ -96,6 +116,7 @@ const unlockLinkValidationSchema = z.object({
   }),
   body: z.object({
     password: z.string().min(1, "Password is required"),
+    host: z.string().min(1, "Host is required"),
   }),
 });
 

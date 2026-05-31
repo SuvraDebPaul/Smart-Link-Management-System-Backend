@@ -2,6 +2,9 @@ import { Types } from "mongoose";
 import AppError from "../../errors/AppError.js";
 import { Link } from "../link/link.model.js";
 import { Campaign } from "./campaign.model.js";
+import type { TAuthUser } from "../user/user.interface.js";
+import { checkPlanLimit } from "../../utils/checkPlanLimit.js";
+import { buildLinkResponse } from "../link/link.service.js";
 
 const buildCampaignResponse = (campaign: any) => {
   return {
@@ -15,6 +18,15 @@ const buildCampaignResponse = (campaign: any) => {
     createdAt: campaign.createdAt,
     updatedAt: campaign.updatedAt,
   };
+};
+
+const validateCampaignDateRange = (
+  startDate?: Date | null,
+  endDate?: Date | null,
+) => {
+  if (startDate && endDate && endDate < startDate) {
+    throw new AppError(400, "Campaign end date cannot be before start date");
+  }
 };
 
 const ensureCampaignBelongsToUser = async (id: string, userId: string) => {
@@ -39,15 +51,31 @@ const createCampaignIntoDB = async (
     endDate?: string | null;
     goalClicks?: number | null;
   },
-  userId: string,
+  userPayload: TAuthUser,
 ) => {
+  const userObjectId = new Types.ObjectId(userPayload.id);
+  const totalCampaigns = await Campaign.countDocuments({
+    userId: userObjectId,
+  });
+  checkPlanLimit({
+    plan: userPayload.plan,
+    subscriptionStatus: userPayload.subscriptionStatus,
+    key: "campaigns",
+    currentUsage: totalCampaigns,
+  });
+
+  const startDate = payload.startDate ? new Date(payload.startDate) : null;
+  const endDate = payload.endDate ? new Date(payload.endDate) : null;
+
+  validateCampaignDateRange(startDate, endDate);
+
   const result = await Campaign.create({
-    userId: new Types.ObjectId(userId),
+    userId: userObjectId,
     name: payload.name,
     description: payload.description ?? null,
     status: payload.status ?? "active",
-    startDate: payload.startDate ? new Date(payload.startDate) : null,
-    endDate: payload.endDate ? new Date(payload.endDate) : null,
+    startDate: startDate,
+    endDate: endDate,
     goalClicks: payload.goalClicks ?? null,
   });
 
@@ -85,23 +113,26 @@ const getCampaignLinksFromDB = async (id: string, userId: string) => {
     campaignId: campaign._id,
     userId: new Types.ObjectId(userId),
   })
-    .sort({ createdAt: -1 })
-    .lean();
+    .populate("domainId")
+    .sort({ createdAt: -1 });
 
-  return links;
+  return links.map((link) => buildLinkResponse(link));
 };
 
-const getAvailableLinksForCampaignFromDB = async (id: string, userId: string) => {
+const getAvailableLinksForCampaignFromDB = async (
+  id: string,
+  userId: string,
+) => {
   await ensureCampaignBelongsToUser(id, userId);
 
   const links = await Link.find({
-    userId: new Types.ObjectId(userId),
     campaignId: null,
+    userId: new Types.ObjectId(userId),
   })
-    .sort({ createdAt: -1 })
-    .lean();
+    .populate("domainId")
+    .sort({ createdAt: -1 });
 
-  return links;
+  return links.map((link) => buildLinkResponse(link));
 };
 
 const addLinkToCampaignIntoDB = async (
@@ -194,6 +225,8 @@ const updateCampaignIntoDB = async (
   if (payload.goalClicks !== undefined) {
     campaign.goalClicks = payload.goalClicks;
   }
+
+  validateCampaignDateRange(campaign.startDate, campaign.endDate);
 
   const result = await campaign.save();
 

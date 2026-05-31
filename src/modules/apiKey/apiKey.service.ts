@@ -2,17 +2,46 @@ import { Types } from "mongoose";
 import { generateApiKey, hashApiKey } from "./apiKey.utils.js";
 import { ApiKey } from "./apiKey.model.js";
 import AppError from "../../errors/AppError.js";
+import type { TAuthUser } from "../user/user.interface.js";
+import { checkPlanLimit } from "../../utils/checkPlanLimit.js";
+import { User } from "../user/user.model.js";
 
-const createApiKeyIntoDB = async (userId: string, name: string) => {
+export const getAvailableApiKeyFilter = () => ({
+  isActive: true,
+  $or: [
+    { expiresAt: null },
+    { expiresAt: { $exists: false } },
+    { expiresAt: { $gt: new Date() } },
+  ],
+});
+
+const createApiKeyIntoDB = async (userPayload: TAuthUser, name: string) => {
+  const userObjectId = new Types.ObjectId(userPayload.id);
+  const totalApiKeys = await ApiKey.countDocuments({
+    user: userObjectId,
+    ...getAvailableApiKeyFilter(),
+  });
+  checkPlanLimit({
+    plan: userPayload.plan,
+    subscriptionStatus: userPayload.subscriptionStatus,
+    key: "apiKeys",
+    currentUsage: totalApiKeys,
+  });
   const { apiKey, keyPrefix } = generateApiKey();
-
   const keyHash = hashApiKey(apiKey);
-
+  const user = await User.findById(userObjectId).select(
+    "apiSecurityPreferences.defaultApiKeyExpiryDays",
+  );
+  const expiryDays = user?.apiSecurityPreferences?.defaultApiKeyExpiryDays;
+  const expiresAt = expiryDays
+    ? new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000)
+    : null;
   const result = await ApiKey.create({
-    user: new Types.ObjectId(userId),
+    user: userObjectId,
     name,
     keyHash,
     keyPrefix,
+    expiresAt,
   });
 
   return {
@@ -21,6 +50,7 @@ const createApiKeyIntoDB = async (userId: string, name: string) => {
     key: apiKey,
     keyPrefix: result.keyPrefix,
     isActive: result.isActive,
+    expiresAt: result.expiresAt,
     createdAt: result.createdAt,
   };
 };
@@ -29,7 +59,7 @@ const getMyApiKeysFromDB = async (userId: string) => {
   const result = await ApiKey.find({
     user: userId,
   })
-    .select("name keyPrefix lastUsedAt isActive createdAt updatedAt")
+    .select("name keyPrefix lastUsedAt expiresAt isActive createdAt updatedAt")
     .sort({
       createdAt: -1,
     });
@@ -50,7 +80,7 @@ const revokeApiKeyFromDB = async (userId: string, apiKeyId: string) => {
     {
       new: true,
     },
-  ).select("name keyPrefix isActive lastUsedAt createdAt updatedAt");
+  ).select("name keyPrefix isActive lastUsedAt expiresAt createdAt updatedAt");
 
   if (!result) {
     throw new AppError(404, "API key not found or already revoked");

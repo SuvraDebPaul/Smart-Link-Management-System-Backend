@@ -1,13 +1,10 @@
 import type { NextFunction, Request, Response } from "express";
-import AppError from "../errors/AppError.js";
-import jwt, { type JwtPayload } from "jsonwebtoken";
-import config from "../config/index.js";
+import { fromNodeHeaders } from "better-auth/node";
 
-export interface TAuthUser {
-  id: string;
-  email: string;
-  role: string;
-}
+import AppError from "../errors/AppError.js";
+import { betterAuthInstance } from "../modules/auth/better-auth.js";
+import { User } from "../modules/user/user.model.js";
+import type { TAuthUser, TUserRole } from "../modules/user/user.interface.js";
 
 declare global {
   namespace Express {
@@ -17,36 +14,122 @@ declare global {
   }
 }
 
-export const auth = (...requiredRoles: string[]) => {
-  return (req: Request, res: Response, next: NextFunction) => {
-    const authorization = req.headers.authorization;
-    if (!authorization) {
-      throw new AppError(401, "You are not authorized");
-    }
+const getOrCreateAppUser = async (sessionUser: {
+  id: string;
+  email?: string | null;
+  name?: string | null;
+  emailVerified?: boolean | null;
+}) => {
+  if (!sessionUser.email) {
+    throw new AppError(401, "Session email not found");
+  }
 
-    const [bearer, token] = authorization.split(" ");
-    if (bearer !== "Bearer" || !token) {
-      throw new AppError(
-        401,
-        "Invalid authorization format. Use: Bearer your_token_here",
-      );
-    }
-    const decoded = jwt.verify(token, config.jwt_access_secret) as JwtPayload &
-      TAuthUser;
+  const userEmail = sessionUser.email.toLowerCase().trim();
 
-    if (!decoded.id || !decoded.email || !decoded.role) {
-      throw new AppError(401, "Invalid token payload");
-    }
+  const fallbackName = userEmail.split("@")[0] || "User";
 
-    if (requiredRoles.length && !requiredRoles.includes(decoded.role)) {
-      throw new AppError(403, "You are forbiden");
-    }
-    req.user = {
-      id: decoded.id,
-      email: decoded.email,
-      role: decoded.role,
-    };
+  const userName =
+    typeof sessionUser.name === "string" && sessionUser.name.trim().length > 0
+      ? sessionUser.name.trim()
+      : fallbackName;
 
-    next();
+  const existingUser = await User.findOne({
+    betterAuthUserId: sessionUser.id,
+  });
+
+  if (existingUser) {
+    return existingUser;
+  }
+
+  const existingUserByEmail = await User.findOne({
+    email: userEmail,
+  });
+
+  if (existingUserByEmail) {
+    existingUserByEmail.betterAuthUserId = sessionUser.id;
+    existingUserByEmail.name = existingUserByEmail.name || userName;
+    existingUserByEmail.isVerified = Boolean(sessionUser.emailVerified);
+
+    await existingUserByEmail.save();
+
+    return existingUserByEmail;
+  }
+
+  const newUser = await User.create({
+    name: userName,
+    email: userEmail,
+    betterAuthUserId: sessionUser.id,
+
+    role: "user",
+    plan: "free",
+    subscriptionStatus: "none",
+    subscriptionProvider: null,
+    subscriptionId: null,
+    stripeCustomerId: null,
+    currentPeriodStart: null,
+    currentPeriodEnd: null,
+    cancelAtPeriodEnd: false,
+
+    companyName: null,
+    timezone: "Asia/Dhaka",
+    notificationPreferences: {
+      weeklyAnalyticsReport: true,
+      campaignGoalReached: true,
+      linkMaxClicksReached: true,
+      domainVerificationFailed: true,
+      securityLoginAlert: true,
+      billingSubscriptionAlert: true,
+    },
+    apiSecurityPreferences: {
+      defaultApiKeyExpiryDays: null,
+      allowedIpAddresses: [],
+      webhookUrl: null,
+    },
+    qrDefaultPreferences: {
+      foregroundColor: "#0ea5e9",
+      backgroundColor: "#ffffff",
+      size: 500,
+      downloadFormat: "png",
+    },
+    isVerified: Boolean(sessionUser.emailVerified),
+  });
+
+  return newUser;
+};
+
+export const auth = (...requiredRoles: TUserRole[]) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const session = await betterAuthInstance.api.getSession({
+        headers: fromNodeHeaders(req.headers),
+      });
+
+      if (!session?.user) {
+        throw new AppError(401, "You are not authenticated");
+      }
+
+      const appUser = await getOrCreateAppUser({
+        id: session.user.id,
+        email: session.user.email,
+        name: session.user.name,
+        emailVerified: session.user.emailVerified,
+      });
+
+      if (requiredRoles.length > 0 && !requiredRoles.includes(appUser.role)) {
+        throw new AppError(403, "You are not allowed");
+      }
+
+      req.user = {
+        id: appUser._id.toString(),
+        email: appUser.email,
+        role: appUser.role,
+        plan: appUser.plan || "free",
+        subscriptionStatus: appUser.subscriptionStatus || "none",
+      };
+
+      next();
+    } catch (error) {
+      next(error);
+    }
   };
 };

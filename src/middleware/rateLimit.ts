@@ -1,5 +1,6 @@
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import type { Request, Response } from "express";
+import { hashApiKey } from "../modules/apiKey/apiKey.utils.js";
 
 const rateLimitHandler = (req: Request, res: Response) => {
   res.status(429).json({
@@ -52,7 +53,7 @@ export const apiKeyBasedLimiter = rateLimit({
     const apiKey = req.headers["x-api-key"];
 
     if (typeof apiKey === "string") {
-      return apiKey;
+      return hashApiKey(apiKey);
     }
 
     return ipKeyGenerator(req.ip || "unknown-ip");
@@ -75,6 +76,19 @@ export const redirectLimiter = rateLimit({
     res.status(429).json({
       success: false,
       message: "Too many redirect requests. Please slow down.",
+    });
+  },
+});
+
+export const linkUnlockLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req: Request, res: Response) => {
+    res.status(429).json({
+      success: false,
+      message: "Too many unlock attempts. Please try again later.",
     });
   },
 });

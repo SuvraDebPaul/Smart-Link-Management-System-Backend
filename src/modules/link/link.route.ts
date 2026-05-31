@@ -4,13 +4,18 @@ import { validateRequest } from "../../middleware/validateRequest.js";
 import { LinkValidations } from "./link.validation.js";
 import { LinkControllers } from "./link.controller.js";
 import flexibleAuth from "../../middleware/flexibleAuth.js";
-import { linkCreateLimiter } from "../../middleware/rateLimit.js";
+import {
+  apiKeyBasedLimiter,
+  linkCreateLimiter,
+  linkUnlockLimiter,
+} from "../../middleware/rateLimit.js";
 
 const router = Router();
 
 router.post(
   "/",
   linkCreateLimiter,
+  apiKeyBasedLimiter,
   flexibleAuth,
   validateRequest(LinkValidations.createLinkValidationSchema),
   LinkControllers.createLink,
@@ -20,6 +25,7 @@ router.get("/", auth("user", "admin"), LinkControllers.getMyLinks);
 
 router.post(
   "/unlock/:shortCode",
+  linkUnlockLimiter,
   validateRequest(LinkValidations.unlockLinkValidationSchema),
   LinkControllers.unlockPasswordProtectedLink,
 );
