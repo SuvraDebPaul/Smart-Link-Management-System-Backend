@@ -6,7 +6,13 @@ const linkSchema = new Schema<ILink>(
     userId: {
       type: Schema.Types.ObjectId,
       ref: "User",
-      required: [true, "User Id is required"],
+      default: null,
+      index: true,
+    },
+    isGuest: {
+      type: Boolean,
+      default: false,
+      index: true,
     },
     campaignId: {
       type: Schema.Types.ObjectId,
@@ -64,5 +70,9 @@ const linkSchema = new Schema<ILink>(
 );
 
 linkSchema.index({ shortCode: 1, domainId: 1 }, { unique: true });
+linkSchema.index(
+  { expiresAt: 1 },
+  { expireAfterSeconds: 0, partialFilterExpression: { isGuest: true } },
+);
 
 export const Link = model<ILink>("Link", linkSchema);

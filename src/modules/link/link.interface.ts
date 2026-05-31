@@ -1,7 +1,8 @@
 import type { Types } from "mongoose";
 
 export interface ILink {
-  userId: Types.ObjectId;
+  userId?: Types.ObjectId | null;
+  isGuest: boolean;
   campaignId?: Types.ObjectId | null;
   domainId?: Types.ObjectId | null;
 

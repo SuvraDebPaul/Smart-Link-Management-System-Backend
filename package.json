@@ -5,12 +5,14 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsup src/server.ts src/jobs/weekly-analytics-report.ts src/jobs/retry-notification-deliveries.ts --format esm --out-dir dist",
+    "build": "tsup src/server.ts src/jobs/weekly-analytics-report.ts src/jobs/retry-notification-deliveries.ts src/jobs/cleanup-guest-links.ts --format esm --out-dir dist",
     "start": "node dist/server.js",
     "job:weekly-analytics": "tsx src/jobs/weekly-analytics-report.ts",
     "job:weekly-analytics:start": "node dist/jobs/weekly-analytics-report.js",
     "job:retry-notifications": "tsx src/jobs/retry-notification-deliveries.ts",
-    "job:retry-notifications:start": "node dist/jobs/retry-notification-deliveries.js"
+    "job:retry-notifications:start": "node dist/jobs/retry-notification-deliveries.js",
+    "job:cleanup-guest-links": "tsx src/jobs/cleanup-guest-links.ts",
+    "job:cleanup-guest-links:start": "node dist/jobs/cleanup-guest-links.js"
   },
   "keywords": [],
   "author": "Suvra Deb Paul",

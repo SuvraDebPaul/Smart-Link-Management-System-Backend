@@ -21,6 +21,17 @@ const createLink = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const createGuestLink = catchAsync(async (req: Request, res: Response) => {
+  const result = await LinkServices.createGuestLinkIntoDB(req.body);
+
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: "Guest short link created successfully",
+    data: result,
+  });
+});
+
 const getMyLinks = catchAsync(async (req: Request, res: Response) => {
   if (!req.user) {
     throw new AppError(401, "You are not authorized");
@@ -122,7 +133,6 @@ const redirectLink = catchAsync(async (req: Request, res: Response) => {
       shortCode as string,
       host,
     );
-    console.log(result);
     if (result.requiresPassword) {
       const query = new URLSearchParams({
         shortCode: result.shortCode,
@@ -133,13 +143,15 @@ const redirectLink = catchAsync(async (req: Request, res: Response) => {
       return;
     }
 
-    void createClickEvent(req, {
-      linkId: result.linkId,
-      userId: result.userId,
-      shortCode: result.shortCode,
-    }).catch((error) => {
-      console.error("Failed to record link click event", error);
-    });
+    if (result.userId) {
+      void createClickEvent(req, {
+        linkId: result.linkId,
+        userId: result.userId,
+        shortCode: result.shortCode,
+      }).catch((error) => {
+        console.error("Failed to record link click event", error);
+      });
+    }
     res.redirect(result.originalUrl as string);
   } catch (error: any) {
     if (error?.statusCode === 410) {
@@ -177,13 +189,15 @@ const unlockPasswordProtectedLink = catchAsync(
       host,
     );
 
-    void createClickEvent(req, {
-      linkId: result.linkId,
-      userId: result.userId,
-      shortCode: result.shortCode,
-    }).catch((error) => {
-      console.error("Failed to record link click event", error);
-    });
+    if (result.userId) {
+      void createClickEvent(req, {
+        linkId: result.linkId,
+        userId: result.userId,
+        shortCode: result.shortCode,
+      }).catch((error) => {
+        console.error("Failed to record link click event", error);
+      });
+    }
 
     sendResponse(res, {
       statusCode: 200,
@@ -199,6 +213,7 @@ const unlockPasswordProtectedLink = catchAsync(
 
 export const LinkControllers = {
   createLink,
+  createGuestLink,
   getMyLinks,
   getSingleLink,
   updateLink,

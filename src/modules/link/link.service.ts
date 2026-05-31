@@ -26,6 +26,7 @@ const reservedAliases = [
   "auth",
   "links",
 ];
+const guestLinkLifetimeMs = 7 * 24 * 60 * 60 * 1000;
 
 const normalizeHost = (host: string) => {
   return host
@@ -155,7 +156,11 @@ const incrementLinkClicks = async (linkId: Types.ObjectId) => {
     throw new AppError(410, "This link is no longer available");
   }
 
-  if (updatedLink.maxClicks && updatedLink.clicks === updatedLink.maxClicks) {
+  if (
+    updatedLink.userId &&
+    updatedLink.maxClicks &&
+    updatedLink.clicks === updatedLink.maxClicks
+  ) {
     await NotificationServices.createNotification({
       userId: updatedLink.userId,
       type: "link-max-clicks",
@@ -259,6 +264,59 @@ const createLinkIntoDB = async (
   const populatedResult = await result.populate("domainId");
 
   return buildLinkResponse(populatedResult);
+};
+
+const createGuestLinkIntoDB = async (payload: {
+  originalUrl: string;
+  customAlias?: string;
+  password?: string;
+  expiresAt?: string;
+}) => {
+  const now = new Date();
+  const maximumExpiry = new Date(now.getTime() + guestLinkLifetimeMs);
+  const expiresAt = payload.expiresAt ? new Date(payload.expiresAt) : maximumExpiry;
+
+  if (expiresAt <= now) {
+    throw new AppError(400, "Guest link expiration must be in the future");
+  }
+
+  if (expiresAt > maximumExpiry) {
+    throw new AppError(400, "Guest links can remain active for up to 7 days");
+  }
+
+  const shortCode = payload.customAlias || generateShortCode();
+
+  if (reservedAliases.includes(shortCode.toLowerCase())) {
+    throw new AppError(400, "This alias is reserved. Please use another one.");
+  }
+
+  const existingShortCode = await Link.findOne({
+    shortCode,
+    domainId: null,
+  });
+
+  if (existingShortCode) {
+    throw new AppError(409, "This short code or alias is already taken");
+  }
+
+  const passwordHash = payload.password
+    ? await bcrypt.hash(payload.password, 12)
+    : null;
+
+  const result = await Link.create({
+    userId: null,
+    isGuest: true,
+    campaignId: null,
+    domainId: null,
+    originalUrl: payload.originalUrl,
+    shortCode,
+    isPasswordProtected: Boolean(payload.password),
+    passwordHash,
+    expiresAt,
+    maxClicks: null,
+  });
+
+  return buildLinkResponse(result);
 };
 
 const getMyLinksFromDB = async (userId: string) => {
@@ -544,6 +602,7 @@ const generateQrCodeFromDB = async (id: string, userId: string) => {
 
 export const LinkServices = {
   createLinkIntoDB,
+  createGuestLinkIntoDB,
   getMyLinksFromDB,
   getSingleLinkFromDB,
   updateLinkIntoDB,

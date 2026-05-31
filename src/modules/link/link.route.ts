@@ -13,6 +13,13 @@ import {
 const router = Router();
 
 router.post(
+  "/guest",
+  linkCreateLimiter,
+  validateRequest(LinkValidations.createGuestLinkValidationSchema),
+  LinkControllers.createGuestLink,
+);
+
+router.post(
   "/",
   linkCreateLimiter,
   apiKeyBasedLimiter,

@@ -41,6 +41,26 @@ const createLinkValidationSchema = z.object({
   }),
 });
 
+const createGuestLinkValidationSchema = z.object({
+  body: z.object({
+    originalUrl: httpUrlSchema,
+    customAlias: z
+      .string()
+      .min(3)
+      .max(30)
+      .regex(
+        /^[a-zA-Z0-9-]+$/,
+        "Alias can contain only letters, numbers, and hyphens",
+      )
+      .optional(),
+    password: z
+      .string()
+      .min(4, "Password must be at least 4 characters")
+      .optional(),
+    expiresAt: z.iso.datetime("Please provide a valid ISO date").optional(),
+  }),
+});
+
 const getSingleLinkValidationSchema = z.object({
   params: z.object({
     id: z.string().regex(objectRegex, "Invalid link ID"),
@@ -122,6 +142,7 @@ const unlockLinkValidationSchema = z.object({
 
 export const LinkValidations = {
   createLinkValidationSchema,
+  createGuestLinkValidationSchema,
   getSingleLinkValidationSchema,
   updateLinkValidationSchema,
   deleteLinkValidationSchema,
