@@ -1,5 +1,6 @@
 import { Types } from "mongoose";
 import config from "../../config/index.js";
+import AppError from "../../errors/AppError.js";
 import { User } from "../user/user.model.js";
 import type { TNotificationPreferences } from "../user/user.interface.js";
 import type { TNotificationType } from "./notification.interface.js";
@@ -11,6 +12,8 @@ const preferenceKeyByType: Record<
   keyof TNotificationPreferences
 > = {
   "campaign-goal": "campaignGoalReached",
+  "campaign-ended": "campaignGoalReached",
+  "campaign-report": "weeklyAnalyticsReport",
   "link-max-clicks": "linkMaxClicksReached",
   "domain-verification-failed": "domainVerificationFailed",
   "billing-subscription": "billingSubscriptionAlert",
@@ -81,16 +84,39 @@ const createNotification = async (payload: {
   }
 };
 
-const getMyNotifications = async (userId: string) => {
+const getMyNotifications = async (
+  userId: string,
+  options: { page?: number; limit?: number; status?: string } = {},
+) => {
   const userObjectId = new Types.ObjectId(userId);
-  const [notifications, unreadCount] = await Promise.all([
-    Notification.find({ userId: userObjectId })
+  const page = Math.max(options.page ?? 1, 1);
+  const limit = Math.min(Math.max(options.limit ?? 20, 1), 100);
+  const filter: { userId: Types.ObjectId; isRead?: boolean } = {
+    userId: userObjectId,
+  };
+
+  if (options.status === "unread") filter.isRead = false;
+  if (options.status === "read") filter.isRead = true;
+
+  const [notifications, unreadCount, total] = await Promise.all([
+    Notification.find(filter)
       .sort({ createdAt: -1 })
-      .limit(20),
+      .skip((page - 1) * limit)
+      .limit(limit),
     Notification.countDocuments({ userId: userObjectId, isRead: false }),
+    Notification.countDocuments(filter),
   ]);
 
-  return { notifications, unreadCount };
+  return {
+    notifications,
+    unreadCount,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.max(Math.ceil(total / limit), 1),
+    },
+  };
 };
 
 const markAllAsRead = async (userId: string) => {
@@ -100,8 +126,40 @@ const markAllAsRead = async (userId: string) => {
   );
 };
 
+const markAsRead = async (userId: string, notificationId: string) => {
+  if (!Types.ObjectId.isValid(notificationId)) {
+    throw new AppError(404, "Notification not found");
+  }
+
+  const result = await Notification.updateOne(
+    { _id: notificationId, userId: new Types.ObjectId(userId) },
+    { $set: { isRead: true } },
+  );
+
+  if (result.matchedCount === 0) {
+    throw new AppError(404, "Notification not found");
+  }
+};
+
+const deleteNotification = async (userId: string, notificationId: string) => {
+  if (!Types.ObjectId.isValid(notificationId)) {
+    throw new AppError(404, "Notification not found");
+  }
+
+  const result = await Notification.deleteOne({
+    _id: notificationId,
+    userId: new Types.ObjectId(userId),
+  });
+
+  if (result.deletedCount === 0) {
+    throw new AppError(404, "Notification not found");
+  }
+};
+
 export const NotificationServices = {
   createNotification,
   getMyNotifications,
   markAllAsRead,
+  markAsRead,
+  deleteNotification,
 };

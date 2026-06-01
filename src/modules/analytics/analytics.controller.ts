@@ -5,6 +5,7 @@ import catchAsync from "../../utils/catchAsync.js";
 import sendResponse from "../../utils/sendResponse.js";
 
 import { PLAN_LIMITS } from "../../constants/planLimits.js";
+import { checkPlanFeature } from "../../utils/checkPlanLimit.js";
 
 const getDateFilters = (req: Request) => {
   if (!req.user) {
@@ -60,6 +61,22 @@ const getOverview = catchAsync(async (req: Request, res: Response) => {
     message: "Analytics overview retrieved successfully",
     data: result,
   });
+});
+const trackConversion = catchAsync(async (req: Request, res: Response) => {
+  const result = await AnalyticsServices.createConversionEventIntoDB(req.params.token as string, req.body);
+  sendResponse(res, { statusCode: 201, success: true, message: "Conversion tracked", data: result });
+});
+const compareCampaigns = catchAsync(async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError(401, "You are not authorized");
+  checkPlanFeature({
+    plan: req.user.plan,
+    subscriptionStatus: req.user.subscriptionStatus,
+    feature: "campaignComparison",
+    message: "Upgrade to Pro or Lifetime to compare campaign performance.",
+  });
+  const ids = (req.query.campaignIds as string).split(",").filter(Boolean);
+  const result = await AnalyticsServices.compareCampaignsFromDB(ids, req.user.id);
+  sendResponse(res, { statusCode: 200, success: true, message: "Campaign comparison retrieved", data: result });
 });
 
 const getSingleLinkAnalytics = catchAsync(
@@ -507,6 +524,8 @@ const getPageLinkDailyClicks = catchAsync(
 
 export const AnalyticsControllers = {
   getOverview,
+  trackConversion,
+  compareCampaigns,
   getSingleLinkAnalytics,
   getDailyClicks,
   getDeviceAnalytics,

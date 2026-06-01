@@ -2,9 +2,44 @@ import z from "zod";
 
 const objectRegex = /^[0-9a-fA-F]{24}$/;
 const httpUrlSchema = z.url("Please provide a valid URL").refine((value) => {
-  const protocol = new URL(value).protocol;
-  return protocol === "http:" || protocol === "https:";
+  try {
+    const protocol = new URL(value).protocol;
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
 }, "Only HTTP and HTTPS URLs are allowed");
+const tagsSchema = z
+  .array(
+    z
+      .string()
+      .trim()
+      .min(1, "Tag must not be empty")
+      .max(30, "Tag must not be more than 30 characters")
+      .regex(
+        /^[a-zA-Z0-9_-]+$/,
+        "Tags can contain only letters, numbers, underscores, and hyphens",
+      ),
+  )
+  .max(10, "You can add up to 10 tags")
+  .optional();
+const folderSchema = z
+  .string()
+  .trim()
+  .min(1, "Folder must not be empty")
+  .max(50, "Folder must not be more than 50 characters")
+  .regex(
+    /^[a-zA-Z0-9 _-]+$/,
+    "Folder can contain only letters, numbers, spaces, underscores, and hyphens",
+  )
+  .nullable()
+  .optional();
+const notesSchema = z
+  .string()
+  .trim()
+  .max(500, "Notes must not be more than 500 characters")
+  .nullable()
+  .optional();
 
 const createLinkValidationSchema = z.object({
   body: z.object({
@@ -22,6 +57,7 @@ const createLinkValidationSchema = z.object({
       .string()
       .min(4, "Password must be at least 4 characters")
       .optional(),
+    startsAt: z.iso.datetime("Please provide a valid ISO date").optional(),
     expiresAt: z.iso.datetime("Please provide a valid ISO date").optional(),
     maxClicks: z
       .number()
@@ -38,6 +74,9 @@ const createLinkValidationSchema = z.object({
       .regex(objectRegex, "Invalid domain ID")
       .nullable()
       .optional(),
+    tags: tagsSchema,
+    folder: folderSchema,
+    notes: notesSchema,
   }),
 });
 
@@ -58,6 +97,38 @@ const createGuestLinkValidationSchema = z.object({
       .min(4, "Password must be at least 4 characters")
       .optional(),
     expiresAt: z.iso.datetime("Please provide a valid ISO date").optional(),
+  }),
+});
+
+const bulkLinkItemSchema = z.object({
+  originalUrl: httpUrlSchema,
+  customAlias: z
+    .string()
+    .min(3)
+    .max(30)
+    .regex(
+      /^[a-zA-Z0-9-]+$/,
+      "Alias can contain only letters, numbers, and hyphens",
+    )
+    .optional(),
+  expiresAt: z.iso.datetime("Please provide a valid ISO date").optional(),
+  startsAt: z.iso.datetime("Please provide a valid ISO date").optional(),
+  maxClicks: z
+    .number()
+    .int("Max clicks must be an integer")
+    .positive("Max clicks must be greater than 0")
+    .optional(),
+  tags: tagsSchema,
+  folder: folderSchema,
+  notes: notesSchema,
+});
+
+const createBulkLinksValidationSchema = z.object({
+  body: z.object({
+    links: z
+      .array(bulkLinkItemSchema)
+      .min(1, "At least one link is required")
+      .max(100, "You can import up to 100 links at a time"),
   }),
 });
 
@@ -85,12 +156,18 @@ const updateLinkValidationSchema = z.object({
         )
         .optional(),
       isActive: z.boolean().optional(),
+      isFavorite: z.boolean().optional(),
+      isArchived: z.boolean().optional(),
       password: z
         .string()
         .min(4, "Password must be at least 4 characters")
         .optional(),
 
       removePassword: z.boolean().optional(),
+      startsAt: z.iso
+        .datetime("Please provide a valid ISO date")
+        .nullable()
+        .optional(),
       expiresAt: z.iso
         .datetime("Please provide a valid ISO date")
         .nullable()
@@ -112,6 +189,9 @@ const updateLinkValidationSchema = z.object({
         .regex(objectRegex, "Invalid domain ID")
         .nullable()
         .optional(),
+      tags: tagsSchema,
+      folder: folderSchema,
+      notes: notesSchema,
     })
     .superRefine((data, ctx) => {
       if (Object.keys(data).length === 0) {
@@ -142,6 +222,7 @@ const unlockLinkValidationSchema = z.object({
 
 export const LinkValidations = {
   createLinkValidationSchema,
+  createBulkLinksValidationSchema,
   createGuestLinkValidationSchema,
   getSingleLinkValidationSchema,
   updateLinkValidationSchema,

@@ -1,5 +1,6 @@
 import { model, Schema } from "mongoose";
 import type { ILink } from "./link.interface.js";
+import { randomBytes } from "node:crypto";
 
 const linkSchema = new Schema<ILink>(
   {
@@ -37,6 +38,31 @@ const linkSchema = new Schema<ILink>(
       trim: true,
       index: true,
     },
+    tags: {
+      type: [String],
+      default: [],
+    },
+    folder: {
+      type: String,
+      default: null,
+      trim: true,
+      index: true,
+    },
+    notes: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    isFavorite: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    isArchived: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
     clicks: {
       type: Number,
       default: 0,
@@ -55,6 +81,10 @@ const linkSchema = new Schema<ILink>(
       select: false,
       default: null,
     },
+    startsAt: {
+      type: Date,
+      default: null,
+    },
     expiresAt: {
       type: Date,
       default: null,
@@ -63,6 +93,10 @@ const linkSchema = new Schema<ILink>(
       type: Number,
       default: null,
     },
+    healthStatus: { type: String, enum: ["unchecked", "healthy", "broken"], default: "unchecked", index: true },
+    healthStatusCode: { type: Number, default: null },
+    healthCheckedAt: { type: Date, default: null },
+    conversionToken: { type: String, default: () => randomBytes(24).toString("hex"), unique: true, sparse: true },
   },
   {
     timestamps: true,

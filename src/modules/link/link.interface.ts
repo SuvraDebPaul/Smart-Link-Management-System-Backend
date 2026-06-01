@@ -8,13 +8,23 @@ export interface ILink {
 
   originalUrl: string;
   shortCode: string;
+  tags: string[];
+  folder?: string | null;
+  notes?: string | null;
+  isFavorite: boolean;
+  isArchived: boolean;
   clicks: number;
   isActive: boolean;
 
   isPasswordProtected: boolean;
   passwordHash?: string | null;
+  startsAt?: Date | null;
   expiresAt?: Date | null;
   maxClicks?: number | null;
+  healthStatus: "unchecked" | "healthy" | "broken";
+  healthStatusCode?: number | null;
+  healthCheckedAt?: Date | null;
+  conversionToken: string;
 
   createdAt: Date;
   updatedAt: Date;

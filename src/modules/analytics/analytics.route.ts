@@ -6,6 +6,18 @@ import { validateRequest } from "../../middleware/validateRequest.js";
 
 const router = express.Router();
 
+router.post(
+  "/conversions/:token",
+  validateRequest(AnalyticsValidations.conversionValidationSchema),
+  AnalyticsControllers.trackConversion,
+);
+router.get(
+  "/campaigns-compare",
+  auth("user", "admin"),
+  validateRequest(AnalyticsValidations.compareCampaignsValidationSchema),
+  AnalyticsControllers.compareCampaigns,
+);
+
 router.get(
   "/overview",
   auth("user", "admin"),

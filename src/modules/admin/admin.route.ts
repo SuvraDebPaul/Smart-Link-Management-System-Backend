@@ -14,6 +14,12 @@ router.patch(
   validateRequest(AdminValidations.updateUserRoleSchema),
   AdminControllers.updateUserRole,
 );
+router.patch(
+  "/users/:userId/plan",
+  auth("admin"),
+  validateRequest(AdminValidations.updateUserPlanSchema),
+  AdminControllers.updateUserPlan,
+);
 router.get("/links", auth("admin"), AdminControllers.getLinks);
 router.patch(
   "/links/:linkId/status",
@@ -46,5 +52,16 @@ router.delete(
   AdminControllers.revokeApiKey,
 );
 router.get("/analytics", auth("admin"), AdminControllers.getAnalytics);
+router.get(
+  "/contact-submissions",
+  auth("admin"),
+  AdminControllers.getContactSubmissions,
+);
+router.patch(
+  "/contact-submissions/:submissionId/status",
+  auth("admin"),
+  validateRequest(AdminValidations.updateContactSubmissionStatusSchema),
+  AdminControllers.updateContactSubmissionStatus,
+);
 
 export const AdminRoutes = router;

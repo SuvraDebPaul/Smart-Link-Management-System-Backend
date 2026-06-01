@@ -43,6 +43,20 @@ const updateUserRole = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const updateUserPlan = catchAsync(async (req: Request, res: Response) => {
+  const result = await AdminServices.updateUserPlan(
+    req.params.userId as string,
+    req.body.plan,
+  );
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "User plan updated successfully",
+    data: result,
+  });
+});
+
 const getLinks = catchAsync(async (_req: Request, res: Response) => {
   const result = await AdminServices.getLinks();
 
@@ -161,10 +175,40 @@ const getAnalytics = catchAsync(async (_req: Request, res: Response) => {
   });
 });
 
+const getContactSubmissions = catchAsync(
+  async (_req: Request, res: Response) => {
+    const result = await AdminServices.getContactSubmissions();
+
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: "Contact submissions retrieved successfully",
+      data: result,
+    });
+  },
+);
+
+const updateContactSubmissionStatus = catchAsync(
+  async (req: Request, res: Response) => {
+    const result = await AdminServices.updateContactSubmissionStatus(
+      req.params.submissionId as string,
+      req.body.status,
+    );
+
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: "Contact submission status updated successfully",
+      data: result,
+    });
+  },
+);
+
 export const AdminControllers = {
   getSummary,
   getUsers,
   updateUserRole,
+  updateUserPlan,
   getLinks,
   updateLinkStatus,
   deleteLink,
@@ -175,4 +219,6 @@ export const AdminControllers = {
   getApiKeys,
   revokeApiKey,
   getAnalytics,
+  getContactSubmissions,
+  updateContactSubmissionStatus,
 };

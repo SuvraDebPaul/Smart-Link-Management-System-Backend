@@ -13,6 +13,7 @@ const createCheckoutSession = catchAsync(async (req: Request, res: Response) => 
   const result = await BillingServices.createCheckoutSession(
     req.user.id,
     req.body.plan,
+    req.body.billingInterval,
   );
 
   sendResponse(res, {

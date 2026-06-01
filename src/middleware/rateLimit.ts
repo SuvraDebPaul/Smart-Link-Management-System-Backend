@@ -92,3 +92,16 @@ export const linkUnlockLimiter = rateLimit({
     });
   },
 });
+
+export const contactSubmissionLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req: Request, res: Response) => {
+    res.status(429).json({
+      success: false,
+      message: "Too many messages submitted. Please try again later.",
+    });
+  },
+});

@@ -3,9 +3,11 @@ import AppError from "../../errors/AppError.js";
 import { Link } from "../link/link.model.js";
 import { ClickEvent } from "./analytics.model.js";
 import { Campaign } from "../campaign/campaign.model.js";
+import { ConversionEvent } from "./conversion.model.js";
 import { Page } from "../page/page.model.js";
 import { PageVisit } from "../pageVisit/pageVisit.model.js";
 import { PageLinkClick } from "../pageVisit/pageLinkClick.model.js";
+import { User } from "../user/user.model.js";
 
 type TDateFilters = {
   startDate?: string | undefined;
@@ -1589,6 +1591,63 @@ const getPageLinkDailyClicksFromDB = async (
   return result;
 };
 
+const createConversionEventIntoDB = async (
+  token: string,
+  payload: { eventName?: string; value?: number },
+) => {
+    const link = await Link.findOne({ conversionToken: token, userId: { $ne: null } });
+    if (!link || !link.userId) throw new AppError(404, "Tracked link not found");
+    const user = await User.findById(link.userId).select("plan subscriptionStatus");
+    if (
+      !user ||
+      !["pro", "lifetime"].includes(user.plan) ||
+      !["active", "trialing"].includes(user.subscriptionStatus)
+    ) {
+      throw new AppError(403, "Conversion tracking requires an active Pro or Lifetime plan");
+    }
+  await ConversionEvent.create({
+    linkId: link._id,
+    campaignId: link.campaignId ?? null,
+    userId: link.userId,
+    eventName: payload.eventName ?? "conversion",
+    value: payload.value ?? 0,
+  });
+  if (link.campaignId) {
+    const totals = await ConversionEvent.aggregate([
+      { $match: { campaignId: link.campaignId } },
+      { $group: { _id: null, conversions: { $sum: 1 }, revenue: { $sum: "$value" } } },
+    ]);
+    await Campaign.updateOne(
+      { _id: link.campaignId },
+      { $set: { conversions: totals[0]?.conversions ?? 0, revenue: totals[0]?.revenue ?? 0 } },
+    );
+  }
+  return { tracked: true };
+};
+
+const compareCampaignsFromDB = async (campaignIds: string[], userId: string) => {
+  const campaigns = await Campaign.find({
+    _id: { $in: campaignIds.map((id) => new Types.ObjectId(id)) },
+    userId: new Types.ObjectId(userId),
+  });
+  return Promise.all(campaigns.map(async (campaign) => {
+    const links = await Link.find({ campaignId: campaign._id }).select("clicks");
+    const totalClicks = links.reduce((sum, link) => sum + link.clicks, 0);
+    const conversions = campaign.conversions ?? 0;
+    return {
+      id: campaign._id,
+      name: campaign.name,
+      totalLinks: links.length,
+      totalClicks,
+      conversions,
+      revenue: campaign.revenue ?? 0,
+      budget: campaign.budget ?? 0,
+      conversionRate: totalClicks ? Number(((conversions / totalClicks) * 100).toFixed(2)) : 0,
+      roi: campaign.budget ? Number(((((campaign.revenue ?? 0) - campaign.budget) / campaign.budget) * 100).toFixed(2)) : null,
+    };
+  }));
+};
+
 export const AnalyticsServices = {
   getAnalyticsOverviewFromDB,
   getSingleLinkAnalyticsFromDB,
@@ -1608,4 +1667,6 @@ export const AnalyticsServices = {
   getPageReferrerAnalyticsFromDB,
   getPageLinkClicksFromDB,
   getPageLinkDailyClicksFromDB,
+  createConversionEventIntoDB,
+  compareCampaignsFromDB,
 };

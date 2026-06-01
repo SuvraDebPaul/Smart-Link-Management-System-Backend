@@ -32,7 +32,7 @@ const userSchema = new Schema<IUser>(
 
     plan: {
       type: String,
-      enum: ["free", "starter", "pro"],
+      enum: ["free", "starter", "pro", "lifetime"],
       default: "free",
       index: true,
     },
@@ -74,6 +74,12 @@ const userSchema = new Schema<IUser>(
     cancelAtPeriodEnd: {
       type: Boolean,
       default: false,
+    },
+
+    billingInterval: {
+      type: String,
+      enum: ["monthly", "yearly", "lifetime", null],
+      default: null,
     },
 
     companyName: {

@@ -2,7 +2,7 @@ import type { Document, Types } from "mongoose";
 
 export type TUserRole = "user" | "admin";
 
-export type TUserPlan = "free" | "starter" | "pro";
+export type TUserPlan = "free" | "starter" | "pro" | "lifetime";
 
 export type TSubscriptionStatus =
   | "none"
@@ -48,6 +48,7 @@ export interface IUser extends Document {
   currentPeriodStart: Date | null;
   currentPeriodEnd: Date | null;
   cancelAtPeriodEnd: boolean;
+  billingInterval: "monthly" | "yearly" | "lifetime" | null;
 
   companyName?: string | null;
   timezone?: string | null;

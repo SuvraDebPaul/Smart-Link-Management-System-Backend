@@ -5,6 +5,8 @@ import config from "../../config/index.js";
 import { BillingServices } from "../billing/billing.service.js";
 import { LoginSecurityServices } from "../notification/login-security.service.js";
 import { AccountDeletionServices } from "../user/account-deletion.service.js";
+import { PasswordResetEmailServices } from "./password-reset-email.service.js";
+import { EmailVerificationServices } from "./email-verification.service.js";
 
 const mongoClient = new MongoClient(config.database_url);
 
@@ -23,6 +25,20 @@ export const betterAuthInstance = betterAuth({
 
   emailAndPassword: {
     enabled: true,
+    requireEmailVerification: true,
+    sendResetPassword: async ({ user, url }) => {
+      await PasswordResetEmailServices.sendPasswordResetEmail(user.email, url);
+    },
+    resetPasswordTokenExpiresIn: 60 * 60,
+  },
+
+  emailVerification: {
+    sendVerificationEmail: async ({ user, url }) => {
+      await EmailVerificationServices.sendVerificationEmail(user.email, url);
+    },
+    sendOnSignUp: true,
+    sendOnSignIn: true,
+    expiresIn: 60 * 60,
   },
 
   databaseHooks: {

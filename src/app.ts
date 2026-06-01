@@ -28,6 +28,7 @@ import { BillingControllers } from "./modules/billing/billing.controller.js";
 import { BillingRoutes } from "./modules/billing/billing.route.js";
 import { NotificationRoutes } from "./modules/notification/notification.route.js";
 import { AdminRoutes } from "./modules/admin/admin.route.js";
+import { ContactRoutes } from "./modules/contact/contact.route.js";
 
 const app: Application = express();
 
@@ -43,6 +44,9 @@ app.use(
 
 app.use("/api/auth/sign-in/email", authLimiter);
 app.use("/api/auth/sign-up/email", authLimiter);
+app.use("/api/auth/request-password-reset", authLimiter);
+app.use("/api/auth/reset-password", authLimiter);
+app.use("/api/auth/send-verification-email", authLimiter);
 app.all("/api/auth/*splat", toNodeHandler(betterAuthInstance));
 
 app.post(
@@ -73,6 +77,7 @@ app.use("/api/users", UserRoutes);
 app.use("/api/billing", BillingRoutes);
 app.use("/api/notifications", NotificationRoutes);
 app.use("/api/admin", AdminRoutes);
+app.use("/api/contact", ContactRoutes);
 
 app.get("/:shortCode", redirectLimiter, LinkControllers.redirectLink);
 

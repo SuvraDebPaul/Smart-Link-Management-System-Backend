@@ -2,6 +2,8 @@ import type { Types } from "mongoose";
 
 export type TNotificationType =
   | "campaign-goal"
+  | "campaign-ended"
+  | "campaign-report"
   | "link-max-clicks"
   | "domain-verification-failed"
   | "billing-subscription"

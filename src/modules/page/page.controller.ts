@@ -70,7 +70,7 @@ const updatePage = catchAsync(async (req: Request, res: Response) => {
     throw new AppError(400, "Page id is required");
   }
 
-  const result = await PageServices.updatePageIntoDB(id, req.user.id, req.body);
+  const result = await PageServices.updatePageIntoDB(id, req.user, req.body);
 
   sendResponse(res, {
     statusCode: 200,
@@ -129,8 +129,22 @@ const getPublicPage = catchAsync(async (req: Request, res: Response) => {
       title: result.title,
       bio: result.bio,
       avatarUrl: result.avatarUrl,
+      headline: result.headline,
+      location: result.location,
+      contactEmail: result.contactEmail,
+      contactPhone: result.contactPhone,
+      websiteUrl: result.websiteUrl,
+      resumeUrl: result.resumeUrl,
+      availability: result.availability,
+      careerSummary: result.careerSummary,
       theme: result.theme,
       links: result.links,
+      socialLinks: result.socialLinks,
+      skills: result.skills,
+      experiences: result.experiences,
+      projects: result.projects,
+      education: result.education,
+      certifications: result.certifications,
       visits: result.visits,
     },
   });

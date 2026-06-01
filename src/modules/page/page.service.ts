@@ -21,18 +21,75 @@ const reservedPageSlugs = [
   "analytics",
   "pages",
   "u",
+  "me",
 ];
+
+const portfolioScalarFields = [
+  "headline",
+  "location",
+  "contactEmail",
+  "contactPhone",
+  "websiteUrl",
+  "resumeUrl",
+  "availability",
+  "careerSummary",
+] as const;
+
+const portfolioArrayFields = [
+  "socialLinks",
+  "skills",
+  "experiences",
+  "projects",
+  "education",
+  "certifications",
+] as const;
+
+const normalizeOrderedItems = (items?: Record<string, any>[]) =>
+  items?.map((item, index) => ({
+    ...item,
+    order: item.order ?? index,
+  }));
+
+const buildPortfolioPatch = (payload: Record<string, any>) => {
+  const result: Record<string, any> = {};
+
+  portfolioScalarFields.forEach((field) => {
+    if (payload[field] !== undefined) result[field] = payload[field];
+  });
+
+  portfolioArrayFields.forEach((field) => {
+    if (payload[field] !== undefined) {
+      result[field] = normalizeOrderedItems(payload[field]) ?? [];
+    }
+  });
+
+  return result;
+};
 
 const buildPageResponse = (page: any) => {
   return {
     id: page._id,
     slug: page.slug,
-    pageUrl: `${config.frontend_url}/u/${page.slug}`,
+    pageUrl: `${config.frontend_url}/me/${page.slug}`,
     title: page.title,
     bio: page.bio ?? null,
     avatarUrl: page.avatarUrl ?? null,
+    headline: page.headline ?? null,
+    location: page.location ?? null,
+    contactEmail: page.contactEmail ?? null,
+    contactPhone: page.contactPhone ?? null,
+    websiteUrl: page.websiteUrl ?? null,
+    resumeUrl: page.resumeUrl ?? null,
+    availability: page.availability ?? null,
+    careerSummary: page.careerSummary ?? null,
     theme: page.theme,
     links: page.links,
+    socialLinks: page.socialLinks ?? [],
+    skills: page.skills ?? [],
+    experiences: page.experiences ?? [],
+    projects: page.projects ?? [],
+    education: page.education ?? [],
+    certifications: page.certifications ?? [],
     visits: page.visits,
     isPublished: page.isPublished,
     createdAt: page.createdAt,
@@ -41,20 +98,7 @@ const buildPageResponse = (page: any) => {
 };
 
 const createPageIntoDB = async (
-  payload: {
-    slug: string;
-    title: string;
-    bio?: string | null;
-    avatarUrl?: string | null;
-    theme?: "light" | "dark" | "gradient";
-    links?: {
-      title: string;
-      url: string;
-      order?: number;
-      isActive?: boolean;
-    }[];
-    isPublished?: boolean;
-  },
+  payload: Record<string, any> & { slug: string; title: string },
   userPayload: TAuthUser,
 ) => {
   const userObjectId = new Types.ObjectId(userPayload.id);
@@ -83,7 +127,7 @@ const createPageIntoDB = async (
   }
 
   const normalizedLinks =
-    payload.links?.map((link, index) => ({
+    payload.links?.map((link: Record<string, any>, index: number) => ({
       title: link.title,
       url: link.url,
       order: link.order ?? index,
@@ -96,6 +140,7 @@ const createPageIntoDB = async (
     title: payload.title,
     bio: payload.bio ?? null,
     avatarUrl: payload.avatarUrl ?? null,
+    ...buildPortfolioPatch(payload),
     theme: payload.theme ?? "light",
     links: normalizedLinks,
     isPublished: payload.isPublished ?? true,
@@ -129,26 +174,12 @@ const getSinglePageFromDB = async (id: string, userId: string) => {
 
 const updatePageIntoDB = async (
   id: string,
-  userId: string,
-  payload: {
-    slug?: string;
-    title?: string;
-    bio?: string | null;
-    avatarUrl?: string | null;
-    theme?: "light" | "dark" | "gradient";
-    links?: {
-      _id?: string;
-      title: string;
-      url: string;
-      order?: number;
-      isActive?: boolean;
-    }[];
-    isPublished?: boolean;
-  },
+  userPayload: TAuthUser,
+  payload: Record<string, any>,
 ) => {
   const page = await Page.findOne({
     _id: new Types.ObjectId(id),
-    userId: new Types.ObjectId(userId),
+    userId: new Types.ObjectId(userPayload.id),
   });
 
   if (!page) {
@@ -189,12 +220,14 @@ const updatePageIntoDB = async (
     page.avatarUrl = payload.avatarUrl;
   }
 
+  page.set(buildPortfolioPatch(payload));
+
   if (payload.theme !== undefined) {
     page.theme = payload.theme;
   }
 
   if (payload.links !== undefined) {
-    page.links = payload.links.map((link, index) => ({
+    page.links = payload.links.map((link: Record<string, any>, index: number) => ({
       _id: link._id ? new Types.ObjectId(link._id) : new Types.ObjectId(),
       title: link.title,
       url: link.url,
@@ -265,8 +298,28 @@ const getPublicPageBySlugFromDB = async (slug: string) => {
     title: page.title,
     bio: page.bio ?? null,
     avatarUrl: page.avatarUrl ?? null,
+    headline: page.headline ?? null,
+    location: page.location ?? null,
+    contactEmail: page.contactEmail ?? null,
+    contactPhone: page.contactPhone ?? null,
+    websiteUrl: page.websiteUrl ?? null,
+    resumeUrl: page.resumeUrl ?? null,
+    availability: page.availability ?? null,
+    careerSummary: page.careerSummary ?? null,
     theme: page.theme,
     links: trackingLinks,
+    socialLinks: (page.socialLinks ?? [])
+      .filter((link) => link.isActive)
+      .sort((a, b) => a.order - b.order),
+    skills: (page.skills ?? []).sort((a, b) => a.order - b.order),
+    experiences: (page.experiences ?? []).sort((a, b) => a.order - b.order),
+    projects: (page.projects ?? [])
+      .filter((project) => project.isActive)
+      .sort((a, b) => a.order - b.order),
+    education: (page.education ?? []).sort((a, b) => a.order - b.order),
+    certifications: (page.certifications ?? []).sort(
+      (a, b) => a.order - b.order,
+    ),
     visits: page.visits,
   };
 };

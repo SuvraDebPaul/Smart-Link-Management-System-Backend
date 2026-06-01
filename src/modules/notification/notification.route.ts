@@ -10,5 +10,15 @@ router.patch(
   auth("user", "admin"),
   NotificationControllers.markAllAsRead,
 );
+router.patch(
+  "/:notificationId/read",
+  auth("user", "admin"),
+  NotificationControllers.markAsRead,
+);
+router.delete(
+  "/:notificationId",
+  auth("user", "admin"),
+  NotificationControllers.deleteNotification,
+);
 
 export const NotificationRoutes = router;

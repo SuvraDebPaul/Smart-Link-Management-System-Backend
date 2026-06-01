@@ -27,8 +27,13 @@ const config = {
 
   stripe_secret_key: process.env.STRIPE_SECRET_KEY,
   stripe_webhook_secret: process.env.STRIPE_WEBHOOK_SECRET,
-  stripe_starter_price_id: process.env.STRIPE_STARTER_PRICE_ID,
-  stripe_pro_price_id: process.env.STRIPE_PRO_PRICE_ID,
+  stripe_starter_monthly_price_id:
+    process.env.STRIPE_STARTER_MONTHLY_PRICE_ID || process.env.STRIPE_STARTER_PRICE_ID,
+  stripe_starter_yearly_price_id: process.env.STRIPE_STARTER_YEARLY_PRICE_ID,
+  stripe_pro_monthly_price_id:
+    process.env.STRIPE_PRO_MONTHLY_PRICE_ID || process.env.STRIPE_PRO_PRICE_ID,
+  stripe_pro_yearly_price_id: process.env.STRIPE_PRO_YEARLY_PRICE_ID,
+  stripe_lifetime_price_id: process.env.STRIPE_LIFETIME_PRICE_ID,
 
   webhook_signing_secret: process.env.WEBHOOK_SIGNING_SECRET,
 

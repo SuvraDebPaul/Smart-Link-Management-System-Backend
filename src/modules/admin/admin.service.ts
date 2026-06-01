@@ -3,12 +3,13 @@ import AppError from "../../errors/AppError.js";
 import { ApiKey } from "../apiKey/apiKey.model.js";
 import { ClickEvent } from "../analytics/analytics.model.js";
 import { Campaign } from "../campaign/campaign.model.js";
+import { ContactSubmission } from "../contact/contact.model.js";
 import { Domain } from "../domain/domain.model.js";
 import { Link } from "../link/link.model.js";
 import { buildLinkResponse } from "../link/link.service.js";
 import { Page } from "../page/page.model.js";
 import { User } from "../user/user.model.js";
-import type { TUserRole } from "../user/user.interface.js";
+import type { TUserPlan, TUserRole } from "../user/user.interface.js";
 
 const toObjectId = (id: string) => {
   if (!Types.ObjectId.isValid(id)) {
@@ -46,7 +47,7 @@ const buildAdminApiKeyResponse = (apiKey: any) => ({
 });
 
 const getSummary = async () => {
-  const [users, links, campaigns, pages, domains, apiKeys, paidUsers] =
+  const [users, links, campaigns, pages, domains, apiKeys, paidUsers, openSupport] =
     await Promise.all([
       User.countDocuments(),
       Link.countDocuments(),
@@ -54,10 +55,20 @@ const getSummary = async () => {
       Page.countDocuments(),
       Domain.countDocuments(),
       ApiKey.countDocuments({ isActive: true }),
-      User.countDocuments({ plan: { $in: ["starter", "pro"] } }),
+      User.countDocuments({ plan: { $in: ["starter", "pro", "lifetime"] } }),
+      ContactSubmission.countDocuments({ status: { $ne: "resolved" } }),
     ]);
 
-  return { users, links, campaigns, pages, domains, apiKeys, paidUsers };
+  return {
+    users,
+    links,
+    campaigns,
+    pages,
+    domains,
+    apiKeys,
+    paidUsers,
+    openSupport,
+  };
 };
 
 const getUsers = async () => {
@@ -86,6 +97,26 @@ const updateUserRole = async (
   }
 
   return user;
+};
+
+const updateUserPlan = async (userId: string, plan: TUserPlan) => {
+  const user = await User.findById(toObjectId(userId));
+  if (!user) throw new AppError(404, "User not found");
+
+  user.plan = plan;
+  user.subscriptionStatus = plan === "free" ? "none" : "active";
+  user.subscriptionProvider = plan === "free" ? null : "manual";
+  user.subscriptionId = null;
+  user.currentPeriodStart = plan === "free" ? null : new Date();
+  user.currentPeriodEnd = null;
+  user.cancelAtPeriodEnd = false;
+  user.billingInterval =
+    plan === "lifetime" ? "lifetime" : plan === "free" ? null : "monthly";
+  await user.save();
+
+  return User.findById(user._id).select(
+    "name email role plan subscriptionStatus isVerified createdAt",
+  );
 };
 
 const getLinks = async () => {
@@ -317,10 +348,32 @@ const getAnalytics = async () => {
   };
 };
 
+const getContactSubmissions = async () => {
+  return ContactSubmission.find().sort({ createdAt: -1 });
+};
+
+const updateContactSubmissionStatus = async (
+  submissionId: string,
+  status: "new" | "in-progress" | "resolved",
+) => {
+  const submission = await ContactSubmission.findByIdAndUpdate(
+    toObjectId(submissionId),
+    { status },
+    { returnDocument: "after" },
+  );
+
+  if (!submission) {
+    throw new AppError(404, "Contact submission not found");
+  }
+
+  return submission;
+};
+
 export const AdminServices = {
   getSummary,
   getUsers,
   updateUserRole,
+  updateUserPlan,
   getLinks,
   updateLinkStatus,
   deleteLink,
@@ -331,4 +384,6 @@ export const AdminServices = {
   getApiKeys,
   revokeApiKey,
   getAnalytics,
+  getContactSubmissions,
+  updateContactSubmissionStatus,
 };

@@ -51,10 +51,24 @@ const pageIdValidationSchema = z.object({
   }),
   query: dateQuerySchema,
 });
+const conversionValidationSchema = z.object({
+  params: z.object({ token: z.string().min(20) }),
+  body: z.object({
+    eventName: z.string().trim().min(1).max(50).optional(),
+    value: z.number().min(0).optional(),
+  }),
+});
+const compareCampaignsValidationSchema = z.object({
+  query: z.object({
+    campaignIds: z.string().min(1),
+  }),
+});
 
 export const AnalyticsValidations = {
   dateFilterSchema,
   linkIdValidationSchema,
   campaignIdValidationSchema,
   pageIdValidationSchema,
+  conversionValidationSchema,
+  compareCampaignsValidationSchema,
 };

@@ -76,7 +76,7 @@ const getMeFromDB = async (userId: string) => {
   const userObjectId = new Types.ObjectId(userId);
 
   const user = await User.findById(userObjectId).select(
-    "name email role plan subscriptionStatus subscriptionProvider subscriptionId currentPeriodStart currentPeriodEnd cancelAtPeriodEnd companyName timezone notificationPreferences apiSecurityPreferences qrDefaultPreferences",
+    "name email role plan subscriptionStatus subscriptionProvider subscriptionId currentPeriodStart currentPeriodEnd cancelAtPeriodEnd billingInterval companyName timezone notificationPreferences apiSecurityPreferences qrDefaultPreferences",
   );
 
   if (!user) {
@@ -111,6 +111,7 @@ const getMeFromDB = async (userId: string) => {
       currentPeriodStart: user.currentPeriodStart,
       currentPeriodEnd: user.currentPeriodEnd,
       cancelAtPeriodEnd: user.cancelAtPeriodEnd,
+      billingInterval: user.billingInterval,
       companyName: user.companyName ?? null,
       timezone: user.timezone ?? null,
       notificationPreferences: normalizeNotificationPreferences(
@@ -191,7 +192,7 @@ const updateMeIntoDB = async (
     if (PLAN_LIMITS[user.plan].qrCustomization !== "advanced") {
       throw new AppError(
         403,
-        "Upgrade to Starter or Pro to customize QR defaults",
+        "Upgrade to Starter, Pro, or Lifetime to customize QR defaults",
       );
     }
 

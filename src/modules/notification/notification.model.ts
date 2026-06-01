@@ -29,6 +29,8 @@ const notificationSchema = new Schema<INotification>(
       type: String,
       enum: [
         "campaign-goal",
+        "campaign-ended",
+        "campaign-report",
         "link-max-clicks",
         "domain-verification-failed",
         "billing-subscription",

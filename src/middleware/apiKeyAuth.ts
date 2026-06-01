@@ -44,7 +44,7 @@ const apiKeyAuth = async (req: Request, res: Response, next: NextFunction) => {
     }
 
     const hasActivePaidSubscription =
-      ["starter", "pro"].includes(user.plan) &&
+      ["starter", "pro", "lifetime"].includes(user.plan) &&
       ["active", "trialing"].includes(user.subscriptionStatus);
 
     if (!hasActivePaidSubscription) {

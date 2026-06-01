@@ -32,6 +32,24 @@ const createGuestLink = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const createBulkLinks = catchAsync(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError(401, "You are not authorized");
+  }
+
+  const result = await LinkServices.createBulkLinksIntoDB(
+    req.body.links,
+    req.user,
+  );
+
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: `${result.created.length} links imported successfully`,
+    data: result,
+  });
+});
+
 const getMyLinks = catchAsync(async (req: Request, res: Response) => {
   if (!req.user) {
     throw new AppError(401, "You are not authorized");
@@ -76,7 +94,7 @@ const updateLink = catchAsync(async (req: Request, res: Response) => {
 
   const result = await LinkServices.updateLinkIntoDB(
     id as string,
-    req.user.id,
+    req.user,
     req.body,
   );
 
@@ -123,6 +141,11 @@ const generateQrCode = catchAsync(async (req: Request, res: Response) => {
     message: "QR code generated successfully",
     data: result,
   });
+});
+const checkLinkHealth = catchAsync(async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError(401, "You are not authorized");
+  const result = await LinkServices.checkSingleLinkHealthFromDB(req.params.id as string, req.user);
+  sendResponse(res, { statusCode: 200, success: true, message: "Link health checked", data: result });
 });
 
 const redirectLink = catchAsync(async (req: Request, res: Response) => {
@@ -214,6 +237,7 @@ const unlockPasswordProtectedLink = catchAsync(
 export const LinkControllers = {
   createLink,
   createGuestLink,
+  createBulkLinks,
   getMyLinks,
   getSingleLink,
   updateLink,
@@ -221,4 +245,5 @@ export const LinkControllers = {
   redirectLink,
   unlockPasswordProtectedLink,
   generateQrCode,
+  checkLinkHealth,
 };

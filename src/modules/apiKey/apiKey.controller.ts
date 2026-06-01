@@ -6,8 +6,12 @@ import AppError from "../../errors/AppError.js";
 
 const createApiKey = catchAsync(async (req: Request, res: Response) => {
   if (!req.user) throw new AppError(401, "You are not authorized");
-  const { name } = req.body;
-  const result = await ApiKeyServices.createApiKeyIntoDB(req.user, name);
+  const { name, expiryDays } = req.body;
+  const result = await ApiKeyServices.createApiKeyIntoDB(
+    req.user,
+    name,
+    expiryDays,
+  );
 
   sendResponse(res, {
     statusCode: 201,
@@ -53,8 +57,29 @@ const revokeApiKey = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const rotateApiKey = catchAsync(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError(401, "You are not authorized");
+  }
+  const userId = req.user.id;
+
+  const { id } = req.params;
+  if (!id || typeof id !== "string") {
+    throw new AppError(400, "Valid API key id is required");
+  }
+  const result = await ApiKeyServices.rotateApiKeyIntoDB(userId, id);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "API key rotated successfully",
+    data: result,
+  });
+});
+
 export const ApiKeyControllers = {
   createApiKey,
   getMyApiKeys,
   revokeApiKey,
+  rotateApiKey,
 };

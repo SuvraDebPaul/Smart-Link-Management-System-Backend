@@ -5,14 +5,20 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsup src/server.ts src/jobs/weekly-analytics-report.ts src/jobs/retry-notification-deliveries.ts src/jobs/cleanup-guest-links.ts --format esm --out-dir dist",
+    "build": "tsup src/server.ts src/jobs/weekly-analytics-report.ts src/jobs/retry-notification-deliveries.ts src/jobs/cleanup-guest-links.ts src/jobs/campaign-lifecycle-notifications.ts src/jobs/link-health-check.ts src/jobs/campaign-scheduled-reports.ts --format esm --out-dir dist",
     "start": "node dist/server.js",
     "job:weekly-analytics": "tsx src/jobs/weekly-analytics-report.ts",
     "job:weekly-analytics:start": "node dist/jobs/weekly-analytics-report.js",
     "job:retry-notifications": "tsx src/jobs/retry-notification-deliveries.ts",
     "job:retry-notifications:start": "node dist/jobs/retry-notification-deliveries.js",
     "job:cleanup-guest-links": "tsx src/jobs/cleanup-guest-links.ts",
-    "job:cleanup-guest-links:start": "node dist/jobs/cleanup-guest-links.js"
+    "job:cleanup-guest-links:start": "node dist/jobs/cleanup-guest-links.js",
+    "job:campaign-lifecycle": "tsx src/jobs/campaign-lifecycle-notifications.ts",
+    "job:campaign-lifecycle:start": "node dist/jobs/campaign-lifecycle-notifications.js",
+    "job:link-health": "tsx src/jobs/link-health-check.ts",
+    "job:link-health:start": "node dist/jobs/link-health-check.js",
+    "job:campaign-reports": "tsx src/jobs/campaign-scheduled-reports.ts",
+    "job:campaign-reports:start": "node dist/jobs/campaign-scheduled-reports.js"
   },
   "keywords": [],
   "author": "Suvra Deb Paul",

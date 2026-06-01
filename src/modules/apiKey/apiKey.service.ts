@@ -15,7 +15,11 @@ export const getAvailableApiKeyFilter = () => ({
   ],
 });
 
-const createApiKeyIntoDB = async (userPayload: TAuthUser, name: string) => {
+const createApiKeyIntoDB = async (
+  userPayload: TAuthUser,
+  name: string,
+  expiryDays?: number | null,
+) => {
   const userObjectId = new Types.ObjectId(userPayload.id);
   const totalApiKeys = await ApiKey.countDocuments({
     user: userObjectId,
@@ -32,9 +36,12 @@ const createApiKeyIntoDB = async (userPayload: TAuthUser, name: string) => {
   const user = await User.findById(userObjectId).select(
     "apiSecurityPreferences.defaultApiKeyExpiryDays",
   );
-  const expiryDays = user?.apiSecurityPreferences?.defaultApiKeyExpiryDays;
-  const expiresAt = expiryDays
-    ? new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000)
+  const resolvedExpiryDays =
+    expiryDays === undefined
+      ? user?.apiSecurityPreferences?.defaultApiKeyExpiryDays
+      : expiryDays;
+  const expiresAt = resolvedExpiryDays
+    ? new Date(Date.now() + resolvedExpiryDays * 24 * 60 * 60 * 1000)
     : null;
   const result = await ApiKey.create({
     user: userObjectId,
@@ -89,8 +96,43 @@ const revokeApiKeyFromDB = async (userId: string, apiKeyId: string) => {
   return result;
 };
 
+const rotateApiKeyIntoDB = async (userId: string, apiKeyId: string) => {
+  const { apiKey, keyPrefix } = generateApiKey();
+  const keyHash = hashApiKey(apiKey);
+  const result = await ApiKey.findOneAndUpdate(
+    {
+      _id: apiKeyId,
+      user: userId,
+      isActive: true,
+    },
+    {
+      keyHash,
+      keyPrefix,
+      lastUsedAt: null,
+    },
+    {
+      new: true,
+    },
+  ).select("name keyPrefix isActive expiresAt createdAt updatedAt");
+
+  if (!result) {
+    throw new AppError(404, "API key not found or already revoked");
+  }
+
+  return {
+    id: result._id,
+    name: result.name,
+    key: apiKey,
+    keyPrefix: result.keyPrefix,
+    isActive: result.isActive,
+    expiresAt: result.expiresAt,
+    createdAt: result.createdAt,
+  };
+};
+
 export const ApiKeyServices = {
   createApiKeyIntoDB,
   getMyApiKeysFromDB,
   revokeApiKeyFromDB,
+  rotateApiKeyIntoDB,
 };

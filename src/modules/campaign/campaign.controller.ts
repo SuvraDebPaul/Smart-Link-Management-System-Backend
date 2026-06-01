@@ -28,6 +28,7 @@ const getMyCampaigns = catchAsync(async (req: Request, res: Response) => {
     throw new AppError(401, "You are not authorized");
   }
 
+  await CampaignServices.notifyEndedCampaignsFromDB(req.user.id);
   const result = await CampaignServices.getMyCampaignsFromDB(req.user.id);
 
   sendResponse(res, {
@@ -36,6 +37,31 @@ const getMyCampaigns = catchAsync(async (req: Request, res: Response) => {
     message: "Campaigns retrieved successfully",
     data: result,
   });
+});
+
+const bulkUpdateCampaignLinks = catchAsync(async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError(401, "You are not authorized");
+  const result = await CampaignServices.bulkUpdateCampaignLinksIntoDB(
+    req.params.id as string,
+    req.user.id,
+    req.body,
+  );
+  sendResponse(res, { statusCode: 200, success: true, message: "Campaign links updated successfully", data: result });
+});
+
+const updateCampaignSharing = catchAsync(async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError(401, "You are not authorized");
+  const result = await CampaignServices.updateCampaignSharingIntoDB(
+    req.params.id as string,
+    req.user,
+    req.body.enabled,
+  );
+  sendResponse(res, { statusCode: 200, success: true, message: "Campaign report sharing updated", data: result });
+});
+
+const getSharedCampaignReport = catchAsync(async (req: Request, res: Response) => {
+  const result = await CampaignServices.getSharedCampaignReportFromDB(req.params.token as string);
+  sendResponse(res, { statusCode: 200, success: true, message: "Shared campaign report retrieved", data: result });
 });
 
 const getSingleCampaign = catchAsync(async (req: Request, res: Response) => {
@@ -153,7 +179,7 @@ const updateCampaign = catchAsync(async (req: Request, res: Response) => {
 
   const result = await CampaignServices.updateCampaignIntoDB(
     id as string,
-    req.user.id,
+    req.user,
     req.body,
   );
 
@@ -161,6 +187,26 @@ const updateCampaign = catchAsync(async (req: Request, res: Response) => {
     statusCode: 200,
     success: true,
     message: "Campaign updated successfully",
+    data: result,
+  });
+});
+
+const duplicateCampaign = catchAsync(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError(401, "You are not authorized");
+  }
+
+  const { id } = req.params;
+
+  const result = await CampaignServices.duplicateCampaignIntoDB(
+    id as string,
+    req.user,
+  );
+
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: "Campaign duplicated successfully",
     data: result,
   });
 });
@@ -194,5 +240,9 @@ export const CampaignControllers = {
   addLinkToCampaign,
   removeLinkFromCampaign,
   updateCampaign,
+  duplicateCampaign,
+  bulkUpdateCampaignLinks,
+  updateCampaignSharing,
+  getSharedCampaignReport,
   deleteCampaign,
 };

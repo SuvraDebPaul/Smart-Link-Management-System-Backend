@@ -21,26 +21,71 @@ const getStripeClient = () => {
   return new Stripe(getStripeSecret(config.stripe_secret_key, "Stripe secret key"));
 };
 
-const getStripePriceId = (plan: Exclude<TUserPlan, "free">) => {
+type TBillingPlan = Exclude<TUserPlan, "free">;
+type TBillingInterval = "monthly" | "yearly";
+
+const getStripePriceId = (
+  plan: TBillingPlan,
+  billingInterval: TBillingInterval = "monthly",
+) => {
+  if (plan === "lifetime") {
+    return getStripeSecret(config.stripe_lifetime_price_id, "Stripe Lifetime price");
+  }
+
   if (plan === "starter") {
     return getStripeSecret(
-      config.stripe_starter_price_id,
-      "Stripe Starter price",
+      billingInterval === "yearly"
+        ? config.stripe_starter_yearly_price_id
+        : config.stripe_starter_monthly_price_id,
+      `Stripe Starter ${billingInterval} price`,
     );
   }
 
-  return getStripeSecret(config.stripe_pro_price_id, "Stripe Pro price");
+  return getStripeSecret(
+    billingInterval === "yearly"
+      ? config.stripe_pro_yearly_price_id
+      : config.stripe_pro_monthly_price_id,
+    `Stripe Pro ${billingInterval} price`,
+  );
 };
 
 const getPlanFromPriceId = (
   priceId: string,
-): Exclude<TUserPlan, "free"> | null => {
-  if (priceId === config.stripe_starter_price_id) {
+): TBillingPlan | null => {
+  if (
+    priceId === config.stripe_starter_monthly_price_id ||
+    priceId === config.stripe_starter_yearly_price_id
+  ) {
     return "starter";
   }
 
-  if (priceId === config.stripe_pro_price_id) {
+  if (
+    priceId === config.stripe_pro_monthly_price_id ||
+    priceId === config.stripe_pro_yearly_price_id
+  ) {
     return "pro";
+  }
+
+  if (priceId === config.stripe_lifetime_price_id) return "lifetime";
+
+  return null;
+};
+
+const getBillingIntervalFromPriceId = (
+  priceId?: string,
+): TBillingInterval | null => {
+  if (
+    priceId === config.stripe_starter_yearly_price_id ||
+    priceId === config.stripe_pro_yearly_price_id
+  ) {
+    return "yearly";
+  }
+
+  if (
+    priceId === config.stripe_starter_monthly_price_id ||
+    priceId === config.stripe_pro_monthly_price_id
+  ) {
+    return "monthly";
   }
 
   return null;
@@ -56,6 +101,40 @@ const getPlanFromSubscription = (subscription: Stripe.Subscription) => {
   const priceId = subscription.items.data[0]?.price.id;
 
   return priceId ? getPlanFromPriceId(priceId) : null;
+};
+
+const synchronizeLifetimePurchase = async (session: Stripe.Checkout.Session) => {
+  if (session.payment_status !== "paid" || session.metadata?.plan !== "lifetime") {
+    return;
+  }
+
+  const appUserId = session.metadata.appUserId || session.client_reference_id;
+  if (!appUserId) return;
+
+  const user = await User.findById(appUserId);
+  if (!user) return;
+
+  const previousPlan = user.plan;
+  user.plan = "lifetime";
+  user.subscriptionStatus = "active";
+  user.subscriptionProvider = "stripe";
+  user.subscriptionId = null;
+  user.stripeCustomerId = getStripeCustomerId(session.customer);
+  user.currentPeriodStart = new Date();
+  user.currentPeriodEnd = null;
+  user.cancelAtPeriodEnd = false;
+  user.billingInterval = "lifetime";
+  await user.save();
+
+  if (previousPlan !== "lifetime") {
+    await NotificationServices.createNotification({
+      userId: user._id,
+      type: "billing-subscription",
+      title: "Lifetime plan activated",
+      message: "Your Lifetime plan is active. Your account no longer requires subscription renewal.",
+      eventKey: `billing-lifetime:${session.id}`,
+    });
+  }
 };
 
 const mapSubscriptionStatus = (
@@ -96,6 +175,10 @@ const synchronizeSubscription = async (subscription: Stripe.Subscription) => {
     return;
   }
 
+  if (user.plan === "lifetime" && user.subscriptionStatus === "active") {
+    return;
+  }
+
   const status = mapSubscriptionStatus(subscription.status);
   const plan =
     status === "cancelled" ? "free" : getPlanFromSubscription(subscription);
@@ -119,6 +202,12 @@ const synchronizeSubscription = async (subscription: Stripe.Subscription) => {
     ? new Date(subscriptionItem.current_period_end * 1000)
     : null;
   user.cancelAtPeriodEnd = subscription.cancel_at_period_end;
+  user.billingInterval =
+    subscription.metadata.billingInterval === "yearly"
+      ? "yearly"
+      : subscription.metadata.billingInterval === "monthly"
+        ? "monthly"
+        : getBillingIntervalFromPriceId(subscriptionItem?.price.id);
 
   await user.save();
 
@@ -135,7 +224,8 @@ const synchronizeSubscription = async (subscription: Stripe.Subscription) => {
 
 const createCheckoutSession = async (
   userId: string,
-  plan: Exclude<TUserPlan, "free">,
+  plan: TBillingPlan,
+  billingInterval: TBillingInterval = "monthly",
 ) => {
   const stripe = getStripeClient();
 
@@ -143,6 +233,10 @@ const createCheckoutSession = async (
 
   if (!user) {
     throw new AppError(404, "User not found");
+  }
+
+  if (user.plan === "lifetime" && user.subscriptionStatus === "active") {
+    throw new AppError(409, "Your Lifetime plan is already active");
   }
 
   if (
@@ -153,30 +247,38 @@ const createCheckoutSession = async (
     throw new AppError(409, "Manage your existing subscription from billing");
   }
 
+  const isLifetime = plan === "lifetime";
   const session = await stripe.checkout.sessions.create({
-    mode: "subscription",
+    mode: isLifetime ? "payment" : "subscription",
     success_url: `${config.frontend_url}/dashboard/settings?tab=subscription&checkout=success`,
     cancel_url: `${config.frontend_url}/dashboard/settings?tab=subscription&checkout=cancelled`,
     client_reference_id: user._id.toString(),
     ...(user.stripeCustomerId
       ? { customer: user.stripeCustomerId }
       : { customer_email: user.email }),
+    ...(!user.stripeCustomerId && isLifetime ? { customer_creation: "always" as const } : {}),
     line_items: [
       {
-        price: getStripePriceId(plan),
+        price: getStripePriceId(plan, billingInterval),
         quantity: 1,
       },
     ],
     metadata: {
       appUserId: user._id.toString(),
       plan,
+      billingInterval: isLifetime ? "lifetime" : billingInterval,
     },
-    subscription_data: {
-      metadata: {
-        appUserId: user._id.toString(),
-        plan,
-      },
-    },
+    ...(!isLifetime
+      ? {
+          subscription_data: {
+            metadata: {
+              appUserId: user._id.toString(),
+              plan,
+              billingInterval,
+            },
+          },
+        }
+      : {}),
   });
 
   if (!session.url) {
@@ -270,6 +372,8 @@ const handleStripeWebhook = async (
     if (subscriptionId) {
       const subscription = await stripe.subscriptions.retrieve(subscriptionId);
       await synchronizeSubscription(subscription);
+    } else {
+      await synchronizeLifetimePurchase(session);
     }
   }
 };

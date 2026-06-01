@@ -28,6 +28,14 @@ router.post(
   LinkControllers.createLink,
 );
 
+router.post(
+  "/bulk",
+  linkCreateLimiter,
+  auth("user", "admin"),
+  validateRequest(LinkValidations.createBulkLinksValidationSchema),
+  LinkControllers.createBulkLinks,
+);
+
 router.get("/", auth("user", "admin"), LinkControllers.getMyLinks);
 
 router.post(
@@ -42,6 +50,12 @@ router.get(
   auth("user", "admin"),
   validateRequest(LinkValidations.getSingleLinkValidationSchema),
   LinkControllers.generateQrCode,
+);
+router.post(
+  "/:id/health-check",
+  auth("user", "admin"),
+  validateRequest(LinkValidations.getSingleLinkValidationSchema),
+  LinkControllers.checkLinkHealth,
 );
 
 router.get(

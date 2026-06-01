@@ -15,6 +15,18 @@ router.post(
 
 router.get("/", auth("user", "admin"), ApiKeyControllers.getMyApiKeys);
 
-router.delete("/:id", auth("user", "admin"), ApiKeyControllers.revokeApiKey);
+router.post(
+  "/:id/rotate",
+  auth("user", "admin"),
+  validateRequest(ApiKeyValidations.apiKeyIdParamsValidationSchema),
+  ApiKeyControllers.rotateApiKey,
+);
+
+router.delete(
+  "/:id",
+  auth("user", "admin"),
+  validateRequest(ApiKeyValidations.apiKeyIdParamsValidationSchema),
+  ApiKeyControllers.revokeApiKey,
+);
 
 export const ApiKeyRoutes = router;

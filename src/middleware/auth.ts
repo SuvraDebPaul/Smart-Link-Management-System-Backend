@@ -38,6 +38,11 @@ const getOrCreateAppUser = async (sessionUser: {
   });
 
   if (existingUser) {
+    if (existingUser.isVerified !== Boolean(sessionUser.emailVerified)) {
+      existingUser.isVerified = Boolean(sessionUser.emailVerified);
+      await existingUser.save();
+    }
+
     return existingUser;
   }
 

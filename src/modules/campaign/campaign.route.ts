@@ -6,6 +6,8 @@ import { validateRequest } from "../../middleware/validateRequest.js";
 
 const router = express.Router();
 
+router.get("/shared/:token", CampaignControllers.getSharedCampaignReport);
+
 router.post(
   "/",
   auth("user", "admin"),
@@ -42,12 +44,31 @@ router.patch(
   validateRequest(CampaignValidations.campaignLinkIdValidationSchema),
   CampaignControllers.removeLinkFromCampaign,
 );
+router.patch(
+  "/:id/links/bulk",
+  auth("user", "admin"),
+  validateRequest(CampaignValidations.campaignBulkLinkValidationSchema),
+  CampaignControllers.bulkUpdateCampaignLinks,
+);
+router.patch(
+  "/:id/share",
+  auth("user", "admin"),
+  validateRequest(CampaignValidations.shareCampaignValidationSchema),
+  CampaignControllers.updateCampaignSharing,
+);
 
 router.get(
   "/:id",
   auth("user", "admin"),
   validateRequest(CampaignValidations.campaignIdValidationSchema),
   CampaignControllers.getSingleCampaign,
+);
+
+router.post(
+  "/:id/duplicate",
+  auth("user", "admin"),
+  validateRequest(CampaignValidations.campaignIdValidationSchema),
+  CampaignControllers.duplicateCampaign,
 );
 
 router.patch(
