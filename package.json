@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsup src/server.ts src/jobs/weekly-analytics-report.ts src/jobs/retry-notification-deliveries.ts src/jobs/cleanup-guest-links.ts src/jobs/campaign-lifecycle-notifications.ts src/jobs/link-health-check.ts src/jobs/campaign-scheduled-reports.ts --format esm --out-dir dist",
+    "test": "tsx --test src/utils/public-http.test.ts",
     "start": "node dist/server.js",
     "job:weekly-analytics": "tsx src/jobs/weekly-analytics-report.ts",
     "job:weekly-analytics:start": "node dist/jobs/weekly-analytics-report.js",

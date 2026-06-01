@@ -3,11 +3,13 @@ import { AnalyticsControllers } from "./analytics.controller.js";
 import { AnalyticsValidations } from "./analytics.validation.js";
 import { auth } from "../../middleware/auth.js";
 import { validateRequest } from "../../middleware/validateRequest.js";
+import { conversionTrackingLimiter } from "../../middleware/rateLimit.js";
 
 const router = express.Router();
 
 router.post(
   "/conversions/:token",
+  conversionTrackingLimiter,
   validateRequest(AnalyticsValidations.conversionValidationSchema),
   AnalyticsControllers.trackConversion,
 );
