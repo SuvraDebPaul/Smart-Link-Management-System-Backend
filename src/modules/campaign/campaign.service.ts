@@ -8,6 +8,7 @@ import { checkPlanFeature, checkPlanLimit } from "../../utils/checkPlanLimit.js"
 import { buildLinkResponse } from "../link/link.service.js";
 import { randomBytes } from "node:crypto";
 import { NotificationServices } from "../notification/notification.service.js";
+import { deleteCampaignAnalytics } from "../../utils/analytics-cleanup.js";
 
 const normalizeTags = (tags?: string[]) =>
   [...new Set((tags ?? []).map((tag) => tag.trim().toLowerCase()).filter(Boolean))];
@@ -490,7 +491,7 @@ const duplicateCampaignIntoDB = async (
     currentUsage: totalCampaigns,
   });
 
-  const result = await Campaign.create({
+  const duplicatePayload = {
     userId: new Types.ObjectId(userPayload.id),
     name: `${campaign.name} - Copy`,
     description: campaign.description ?? null,
@@ -499,7 +500,7 @@ const duplicateCampaignIntoDB = async (
     clientEmail: campaign.clientEmail ?? null,
     clientPhone: campaign.clientPhone ?? null,
     clientCompany: campaign.clientCompany ?? null,
-    status: "paused",
+    status: "paused" as const,
     isArchived: false,
     startDate: campaign.startDate ?? null,
     endDate: campaign.endDate ?? null,
@@ -512,7 +513,11 @@ const duplicateCampaignIntoDB = async (
     isTemplate: false,
     utmPreset: campaign.utmPreset ?? {},
     reportFrequency: campaign.reportFrequency ?? "none",
-  });
+  };
+
+  validateCampaignFeatures(duplicatePayload, userPayload);
+
+  const result = await Campaign.create(duplicatePayload);
 
   return buildCampaignResponse(result);
 };
@@ -602,6 +607,8 @@ const deleteCampaignFromDB = async (id: string, userId: string) => {
   if (!campaign) {
     throw new AppError(404, "Campaign not found");
   }
+
+  await deleteCampaignAnalytics(campaign._id);
 
   await Link.updateMany(
     {

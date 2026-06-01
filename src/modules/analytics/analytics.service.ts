@@ -1594,6 +1594,7 @@ const getPageLinkDailyClicksFromDB = async (
 const createConversionEventIntoDB = async (
   token: string,
   payload: { eventName?: string; value?: number },
+  idempotencyKey: string,
 ) => {
     const link = await Link.findOne({ conversionToken: token, userId: { $ne: null } });
     if (!link || !link.userId) throw new AppError(404, "Tracked link not found");
@@ -1605,14 +1606,24 @@ const createConversionEventIntoDB = async (
     ) {
       throw new AppError(403, "Conversion tracking requires an active Pro or Lifetime plan");
     }
-  await ConversionEvent.create({
-    linkId: link._id,
-    campaignId: link.campaignId ?? null,
-    userId: link.userId,
-    eventName: payload.eventName ?? "conversion",
-    value: payload.value ?? 0,
-  });
-  if (link.campaignId) {
+  const result = await ConversionEvent.updateOne(
+    {
+      linkId: link._id,
+      idempotencyKey,
+    },
+    {
+      $setOnInsert: {
+        campaignId: link.campaignId ?? null,
+        userId: link.userId,
+        eventName: payload.eventName ?? "conversion",
+        value: payload.value ?? 0,
+      },
+    },
+    { upsert: true },
+  );
+  const duplicate = result.upsertedCount === 0;
+
+  if (!duplicate && link.campaignId) {
     const totals = await ConversionEvent.aggregate([
       { $match: { campaignId: link.campaignId } },
       { $group: { _id: null, conversions: { $sum: 1 }, revenue: { $sum: "$value" } } },
@@ -1622,7 +1633,7 @@ const createConversionEventIntoDB = async (
       { $set: { conversions: totals[0]?.conversions ?? 0, revenue: totals[0]?.revenue ?? 0 } },
     );
   }
-  return { tracked: true };
+  return { tracked: !duplicate, duplicate };
 };
 
 const compareCampaignsFromDB = async (campaignIds: string[], userId: string) => {

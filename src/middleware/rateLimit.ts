@@ -105,3 +105,16 @@ export const contactSubmissionLimiter = rateLimit({
     });
   },
 });
+
+export const conversionTrackingLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req: Request, res: Response) => {
+    res.status(429).json({
+      success: false,
+      message: "Too many conversion events. Please try again later.",
+    });
+  },
+});

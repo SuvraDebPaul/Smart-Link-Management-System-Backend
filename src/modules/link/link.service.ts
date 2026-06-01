@@ -13,6 +13,8 @@ import type { TAuthUser } from "../user/user.interface.js";
 import { checkPlanFeature, checkPlanLimit } from "../../utils/checkPlanLimit.js";
 import { NotificationServices } from "../notification/notification.service.js";
 import { randomBytes } from "node:crypto";
+import { deleteLinkAnalytics } from "../../utils/analytics-cleanup.js";
+import { requestPublicHttpHead } from "../../utils/public-http.js";
 
 const reservedAliases = [
   "api",
@@ -706,6 +708,8 @@ const deleteLinkFromDB = async (id: string, userId: string) => {
     throw new AppError(404, "Link not found");
   }
 
+  await deleteLinkAnalytics(result._id);
+
   return buildLinkResponse(result);
 };
 
@@ -811,13 +815,9 @@ const unlockPasswordProtectedLinkFromDB = async (
 const checkLinkHealthFromDB = async (link: any) => {
   let statusCode: number | null = null;
   try {
-    const response = await fetch(link.originalUrl, {
-      method: "HEAD",
-      redirect: "follow",
-      signal: AbortSignal.timeout(7000),
-    });
-    statusCode = response.status;
-    link.healthStatus = response.ok ? "healthy" : "broken";
+    statusCode = await requestPublicHttpHead(link.originalUrl);
+    link.healthStatus =
+      statusCode >= 200 && statusCode < 300 ? "healthy" : "broken";
   } catch {
     link.healthStatus = "broken";
   }

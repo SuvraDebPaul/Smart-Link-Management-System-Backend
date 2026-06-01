@@ -10,6 +10,7 @@ import { buildLinkResponse } from "../link/link.service.js";
 import { Page } from "../page/page.model.js";
 import { User } from "../user/user.model.js";
 import type { TUserPlan, TUserRole } from "../user/user.interface.js";
+import { deleteLinkAnalytics } from "../../utils/analytics-cleanup.js";
 
 const toObjectId = (id: string) => {
   if (!Types.ObjectId.isValid(id)) {
@@ -151,7 +152,7 @@ const deleteLink = async (linkId: string) => {
     throw new AppError(404, "Link not found");
   }
 
-  await ClickEvent.deleteMany({ linkId: link._id });
+  await deleteLinkAnalytics(link._id);
 };
 
 const getDomains = async () => {

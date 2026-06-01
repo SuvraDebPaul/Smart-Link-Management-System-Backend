@@ -63,7 +63,18 @@ const getOverview = catchAsync(async (req: Request, res: Response) => {
   });
 });
 const trackConversion = catchAsync(async (req: Request, res: Response) => {
-  const result = await AnalyticsServices.createConversionEventIntoDB(req.params.token as string, req.body);
+  const idempotencyKey = req.get("idempotency-key")?.trim();
+  if (!idempotencyKey || !/^[a-zA-Z0-9._:-]{8,128}$/.test(idempotencyKey)) {
+    throw new AppError(
+      400,
+      "A valid Idempotency-Key header is required for conversion tracking",
+    );
+  }
+  const result = await AnalyticsServices.createConversionEventIntoDB(
+    req.params.token as string,
+    req.body,
+    idempotencyKey,
+  );
   sendResponse(res, { statusCode: 201, success: true, message: "Conversion tracked", data: result });
 });
 const compareCampaigns = catchAsync(async (req: Request, res: Response) => {

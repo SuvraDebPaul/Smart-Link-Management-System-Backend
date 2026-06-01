@@ -4,6 +4,7 @@ import AppError from "../../errors/AppError.js";
 import { Page } from "./page.model.js";
 import type { TAuthUser } from "../user/user.interface.js";
 import { checkPlanLimit } from "../../utils/checkPlanLimit.js";
+import { deletePageAnalytics } from "../../utils/analytics-cleanup.js";
 
 const reservedPageSlugs = [
   "api",
@@ -168,6 +169,8 @@ const getSinglePageFromDB = async (id: string, userId: string) => {
   if (!page) {
     throw new AppError(404, "Page not found");
   }
+
+  await deletePageAnalytics(page._id);
 
   return buildPageResponse(page);
 };

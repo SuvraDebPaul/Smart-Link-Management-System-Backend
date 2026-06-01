@@ -1,5 +1,5 @@
-import { ClickEvent } from "../analytics/analytics.model.js";
 import { Link } from "./link.model.js";
+import { deleteLinkAnalytics } from "../../utils/analytics-cleanup.js";
 
 const deleteExpiredGuestLinks = async () => {
   const expiredLinks = await Link.find({
@@ -13,7 +13,7 @@ const deleteExpiredGuestLinks = async () => {
   }
 
   await Promise.all([
-    ClickEvent.deleteMany({ linkId: { $in: linkIds } }),
+    deleteLinkAnalytics(linkIds),
     Link.deleteMany({ _id: { $in: linkIds } }),
   ]);
 
